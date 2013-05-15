@@ -60,6 +60,7 @@ public class ConversationViewer : Gtk.Box {
     private Gtk.Menu? attachment_menu = null;
     private weak Geary.Folder? current_folder = null;
     private Geary.AccountInformation? current_account_information = null;
+    private ConversationFindBar conversation_find_bar;
     
     public ConversationViewer() {
         Object(orientation: Gtk.Orientation.VERTICAL, spacing: 0);
@@ -87,6 +88,11 @@ public class ConversationViewer : Gtk.Box {
         message_overlay.add_overlay(message_overlay_label);
         
         pack_start(message_overlay);
+        
+        conversation_find_bar = new ConversationFindBar(web_view);
+        conversation_find_bar.no_show_all = true;
+        
+        pack_start(conversation_find_bar, false);
     }
     
     public Geary.Email? get_last_message() {
@@ -109,6 +115,9 @@ public class ConversationViewer : Gtk.Box {
         
         current_folder = new_folder;
         current_account_information = account_information;
+        
+        if (conversation_find_bar.visible)
+            conversation_find_bar.hide();
     }
     
     // Converts an email ID into HTML ID used by the <div> for the email.
@@ -181,16 +190,26 @@ public class ConversationViewer : Gtk.Box {
         }
         
         if (remote_images) {
-            WebKit.DOM.HTMLElement remote_images_bar =
-                Util.DOM.select(div_message, ".remote_images");
-            try {
-                ((WebKit.DOM.Element) remote_images_bar).get_class_list().add("show");
-                remote_images_bar.set_inner_html("""%s %s
-                    <input type="button" value="%s" class="show_images" />""".printf(
-                    remote_images_bar.get_inner_html(), _("This message contains remote images."),
-                    _("Show Images")));
-            } catch (Error error) {
-                warning("Error showing remote images bar: %s", error.message);
+            Geary.Contact contact = current_folder.account.get_contact_store().get_by_rfc822(
+                email.get_primary_originator());
+            bool always_load = contact != null && contact.always_load_remote_images();
+            
+            if (always_load || email.load_remote_images().is_certain()) {
+                show_images_email(div_message, false);
+            } else {
+                WebKit.DOM.HTMLElement remote_images_bar =
+                    Util.DOM.select(div_message, ".remote_images");
+                try {
+                    ((WebKit.DOM.Element) remote_images_bar).get_class_list().add("show");
+                    remote_images_bar.set_inner_html("""%s %s
+                        <input type="button" value="%s" class="show_images" />
+                        <input type="button" value="%s" class="show_from" />""".printf(
+                        remote_images_bar.get_inner_html(),
+                        _("This message contains remote images."), _("Show images"),
+                        _("Always show from sender")));
+                } catch (Error error) {
+                    warning("Error showing remote images bar: %s", error.message);
+                }
             }
         }
         
@@ -226,7 +245,12 @@ public class ConversationViewer : Gtk.Box {
         bind_event(web_view, ".attachment_container .attachment", "click", (Callback) on_attachment_clicked, this);
         bind_event(web_view, ".attachment_container .attachment", "contextmenu", (Callback) on_attachment_menu, this);
         bind_event(web_view, ".remote_images .show_images", "click", (Callback) on_show_images, this);
+        bind_event(web_view, ".remote_images .show_from", "click", (Callback) on_show_images_from, this);
         bind_event(web_view, ".remote_images .close_show_images", "click", (Callback) on_close_show_images, this);
+        
+        // Update the search results
+        if (conversation_find_bar.visible)
+            conversation_find_bar.commence_search();
     }
     
     private WebKit.DOM.HTMLElement make_email_div() {
@@ -647,6 +671,9 @@ public class ConversationViewer : Gtk.Box {
 
     private void on_body_toggle_clicked_self(WebKit.DOM.Element element) {
         try {
+            if (web_view.get_dom_document().get_body().get_class_list().contains("nohide"))
+                return;
+            
             WebKit.DOM.HTMLElement? email_element = closest_ancestor(element, ".email");
             if (email_element == null)
                 return;
@@ -669,11 +696,50 @@ public class ConversationViewer : Gtk.Box {
         ConversationViewer conversation_viewer) {
         WebKit.DOM.HTMLElement? email_element = closest_ancestor(element, ".email");
         if (email_element != null)
-            conversation_viewer.show_images_email(email_element);
+            conversation_viewer.show_images_email(email_element, true);
     }
     
-    private void show_images_email(WebKit.DOM.Element email_element) {
-        // TODO: Remember that these images have been shown.
+    private static void on_show_images_from(WebKit.DOM.Element element, WebKit.DOM.Event event,
+        ConversationViewer conversation_viewer) {
+        Geary.Email? email = conversation_viewer.get_email_from_element(element);
+        if (email == null)
+            return;
+        
+        Geary.ContactStore contact_store =
+            conversation_viewer.current_folder.account.get_contact_store();
+        Geary.Contact? contact = contact_store.get_by_rfc822(email.get_primary_originator());
+        if (contact == null) {
+            debug("Couldn't find contact for %s", email.from.to_string());
+            return;
+        }
+        
+        Geary.ContactFlags flags = new Geary.ContactFlags();
+        flags.add(Geary.ContactFlags.ALWAYS_LOAD_REMOTE_IMAGES);
+        Gee.ArrayList<Geary.Contact> contact_list = new Gee.ArrayList<Geary.Contact>();
+        contact_list.add(contact);
+        contact_store.mark_contacts_async.begin(contact_list, flags, null);
+        
+        WebKit.DOM.Document document = conversation_viewer.web_view.get_dom_document();
+        try {
+            WebKit.DOM.NodeList nodes = document.query_selector_all(".email");
+            for (ulong i = 0; i < nodes.length; i ++) {
+                WebKit.DOM.Element? email_element = nodes.item(i) as WebKit.DOM.Element;
+                if (email_element != null) {
+                    WebKit.DOM.Element? address = email_element.query_selector(".address_name");
+                    if (address != null) {
+                        WebKit.DOM.Element? mailto_link = address.parent_node as WebKit.DOM.Element;
+                        if (mailto_link != null && contact.normalized_email ==
+                            mailto_link.get_attribute("href").substring(7).normalize().casefold())
+                            conversation_viewer.show_images_email(email_element, false);
+                    }
+                }
+            }
+        } catch (Error error) {
+            debug("Error showing images: %s", error.message);
+        }
+    }
+    
+    private void show_images_email(WebKit.DOM.Element email_element, bool remember) {
         try {
             WebKit.DOM.NodeList body_nodes = email_element.query_selector_all(".body");
             for (ulong j = 0; j < body_nodes.length; j++) {
@@ -698,6 +764,16 @@ public class ConversationViewer : Gtk.Box {
                 remote_images.get_class_list().remove("show");
         } catch (Error error) {
             warning("Error showing images: %s", error.message);
+        }
+        
+        if (remember) {
+            // only add flag to load remote images if not already present
+            Geary.Email? message = get_email_from_element(email_element);
+            if (message != null && !message.load_remote_images().is_certain()) {
+                Geary.EmailFlags flags = new Geary.EmailFlags();
+                flags.add(Geary.EmailFlags.LOAD_REMOTE_IMAGES);
+                mark_message(message, flags, null);
+            }
         }
     }
     
@@ -1232,7 +1308,19 @@ public class ConversationViewer : Gtk.Box {
             dialog.run();
         }
     }
-
+    
+    public void show_find_bar() {
+        conversation_find_bar.show();
+        conversation_find_bar.focus_entry();
+    }
+    
+    public void find(bool forward) {
+        if (!conversation_find_bar.visible)
+            show_find_bar();
+        
+        conversation_find_bar.find(forward);
+    }
+    
     public void mark_read() {
         Gee.List<Geary.EmailIdentifier> ids = new Gee.ArrayList<Geary.EmailIdentifier>();
         WebKit.DOM.Document document = web_view.get_dom_document();

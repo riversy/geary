@@ -18,13 +18,13 @@ engine/api/geary-attachment.vala
 engine/api/geary-base-object.vala
 engine/api/geary-composed-email.vala
 engine/api/geary-contact.vala
+engine/api/geary-contact-flags.vala
 engine/api/geary-contact-importance.vala
 engine/api/geary-contact-store.vala
 engine/api/geary-conversation.vala
 engine/api/geary-conversation-monitor.vala
 engine/api/geary-credentials.vala
 engine/api/geary-credentials-mediator.vala
-engine/api/geary-email-flag.vala
 engine/api/geary-email-flags.vala
 engine/api/geary-email-identifier.vala
 engine/api/geary-email-properties.vala
@@ -42,6 +42,8 @@ engine/api/geary-folder-supports-mark.vala
 engine/api/geary-folder-supports-move.vala
 engine/api/geary-folder-supports-remove.vala
 engine/api/geary-logging.vala
+engine/api/geary-named-flag.vala
+engine/api/geary-named-flags.vala
 engine/api/geary-service-provider.vala
 engine/api/geary-special-folder-type.vala
 
@@ -123,6 +125,7 @@ engine/imap-db/outbox/smtp-outbox-folder-root.vala
 engine/imap-engine/imap-engine.vala
 engine/imap-engine/imap-engine-account-synchronizer.vala
 engine/imap-engine/imap-engine-batch-operations.vala
+engine/imap-engine/imap-engine-contact-store.vala
 engine/imap-engine/imap-engine-email-flag-watcher.vala
 engine/imap-engine/imap-engine-email-prefetcher.vala
 engine/imap-engine/imap-engine-generic-account.vala
@@ -269,6 +272,7 @@ client/util/util-gtk.vala
 client/util/util-webkit.vala
 
 client/views/formatted-conversation-data.vala
+client/views/conversation-find-bar.vala
 client/views/conversation-list-cell-renderer.vala
 client/views/conversation-list-view.vala
 client/views/conversation-viewer.vala
@@ -353,7 +357,7 @@ pkg_check_modules(DEPS REQUIRED
     sqlite3>=3.7.4
     gmime-2.6>=2.6.0
     libsecret-1>=0.11
-    webkitgtk-3.0>=1.8.0
+    webkitgtk-3.0>=1.10.0
     ${EXTRA_CLIENT_PKG_CONFIG}
 )
 
