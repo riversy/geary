@@ -1646,15 +1646,17 @@ public class ComposerWindow : Gtk.Window {
     }
     
     private void add_account_emails_to_from_list(Geary.Account account) {
-        from_multiple.append_text(account.information.email);
+        from_multiple.append_text(account.information.get_primary_mailbox_address().to_rfc822_string());
         from_list.add(new FromAddressMap(account, account.information.email));
         
         if (account.information.alternate_emails != null) {
             foreach (string alternate_email in account.information.alternate_emails) {
+                string rfc822_address = new Geary.RFC822.MailboxAddress(
+                    account.information.real_name, alternate_email).to_rfc822_string();
                 // Displayed in the From dropdown to indicate an "alternate email address"
                 // for an account.  The first printf argument will be the alternate email
                 // address, and the second will be the account's primary email address.
-                string display = _("%1$s via %2$s").printf(alternate_email, account.information.email);
+                string display = _("%1$s via %2$s").printf(rfc822_address, account.information.email);
                 from_multiple.append_text(display);
                 from_list.add(new FromAddressMap(account, alternate_email));
             }
