@@ -1726,7 +1726,8 @@ public class ComposerWindow : Gtk.Window {
             account.information.real_name, from_list.get(index).email)).to_rfc822_string();
         set_entry_completions();
         
-        open_drafts_folder_async.begin(cancellable_drafts);
+        if (drafts_folder == null || drafts_folder.account != account)
+            open_drafts_folder_async.begin(cancellable_drafts);
         
         reset_draft_timer();
     }
