@@ -13,6 +13,15 @@ public class ComposerWindow : Gtk.Window {
         FORWARD
     }
     
+    private class FromAddressMap {
+        public Geary.Account account;
+        public string email;
+        public FromAddressMap(Geary.Account a, string e) {
+            account = a;
+            email = e;
+        }
+    }
+    
     public const string ACTION_UNDO = "undo";
     public const string ACTION_REDO = "redo";
     public const string ACTION_CUT = "cut";
@@ -144,6 +153,7 @@ public class ComposerWindow : Gtk.Window {
     private Gtk.Label from_label;
     private Gtk.Label from_single;
     private Gtk.ComboBoxText from_multiple = new Gtk.ComboBoxText();
+    private Gee.ArrayList<FromAddressMap> from_list = new Gee.ArrayList<FromAddressMap>();
     private EmailEntry to_entry;
     private EmailEntry cc_entry;
     private EmailEntry bcc_entry;
@@ -321,7 +331,7 @@ public class ComposerWindow : Gtk.Window {
         
         add_extra_accelerators();
         
-        from = account.information.get_from().to_rfc822_string();
+        from = account.information.get_primary_from().to_rfc822_string();
         update_from_field();
         from_multiple.changed.connect(on_from_changed);
         
@@ -354,7 +364,8 @@ public class ComposerWindow : Gtk.Window {
                 
                 case ComposeType.REPLY:
                 case ComposeType.REPLY_ALL:
-                    string? sender_address = account.information.get_mailbox_address().address;
+                    // TODO: find alternate email address?
+                    string? sender_address = account.information.email;
                     to = Geary.RFC822.Utils.create_to_addresses_for_reply(referred, sender_address);
                     if (compose_type == ComposeType.REPLY_ALL)
                         cc = Geary.RFC822.Utils.create_cc_addresses_for_reply_all(referred, sender_address);
@@ -458,6 +469,7 @@ public class ComposerWindow : Gtk.Window {
         
         // If there's only one account, open the drafts folder.  If there's more than one account,
         // the drafts folder will be opened by on_from_changed().
+        // TODO: determine if there's only one account, not just if the combo box is visible
         if (!from_multiple.visible)
             open_drafts_folder_async.begin(cancellable_drafts);
     }
@@ -1633,6 +1645,22 @@ public class ComposerWindow : Gtk.Window {
         }
     }
     
+    private void add_account_emails_to_from_list(Geary.Account account) {
+        from_multiple.append_text(account.information.email);
+        from_list.add(new FromAddressMap(account, account.information.email));
+        
+        if (account.information.alternate_emails != null) {
+            foreach (string alternate_email in account.information.alternate_emails) {
+                // Displayed in the From dropdown to indicate an "alternate email address"
+                // for an account.  The first printf argument will be the alternate email
+                // address, and the second will be the account's primary email address.
+                string display = _("%1$s via %2$s").printf(alternate_email, account.information.email);
+                from_multiple.append_text(display);
+                from_list.add(new FromAddressMap(account, alternate_email));
+            }
+        }
+    }
+    
     private void update_from_field() {
         from_single.visible = from_multiple.visible = from_label.visible = false;
         
@@ -1645,38 +1673,40 @@ public class ComposerWindow : Gtk.Window {
             return;
         }
         
-        // If there's only one account, show nothing. (From fields are hidden above.)
-        if (accounts.size <= 1)
+        if (accounts.size < 1 || (accounts.size == 1 && Geary.traverse<Geary.AccountInformation>(
+            accounts.values).first().alternate_emails == null))
             return;
         
         from_label.visible = true;
         
+        from_label.set_use_underline(true);
+        from_label.set_mnemonic_widget(from_multiple);
+        // Composer label (with mnemonic underscore) for the account selector
+        // when choosing what address to send a message from.
+        from_label.set_text_with_mnemonic(_("_From:"));
+        
+        from_multiple.visible = true;
+        from_multiple.remove_all();
+        from_list = new Gee.ArrayList<FromAddressMap>();
+        
         if (compose_type == ComposeType.NEW_MESSAGE) {
-            // For new messages, show the account combo-box.
-            from_label.set_use_underline(true);
-            from_label.set_mnemonic_widget(from_multiple);
-            // Composer label (with mnemonic underscore) for the account selector
-            // when choosing what address to send a message from.
-            from_label.set_text_with_mnemonic(_("_From:"));
+            add_account_emails_to_from_list(account);
+            foreach (Geary.AccountInformation info in accounts.values) {
+                try {
+                    Geary.Account a = Geary.Engine.instance.get_account_instance(info);
+                    if (a != account)
+                        add_account_emails_to_from_list(a);
+                } catch (Error e) {
+                    debug("Error getting account in composer: %s", e.message);
+                }
+            }
             
-            from_multiple.visible = true;
-            from_multiple.remove_all();
-            foreach (Geary.AccountInformation a in accounts.values)
-                from_multiple.append(a.email, a.get_mailbox_address().get_full_address());
-            
-            // Set the active account to the currently selected account, or failing that, set it
-            // to the first account in the list.
-            if (!from_multiple.set_active_id(account.information.email))
-                from_multiple.set_active(0);
+            from_multiple.set_active(0);
         } else {
-            // For other types of messages, just show the from account.
-            from_label.set_use_underline(false);
-            // Composer label (without mnemonic underscore) for the account selector
-            // when choosing what address to send a message from.
-            from_label.set_text(_("From:"));
+            add_account_emails_to_from_list(account);
             
-            from_single.label = account.information.get_mailbox_address().get_full_address();
-            from_single.visible = true;
+            // TODO: select address the original message was to, if available.
+            from_multiple.set_active(0);
         }
     }
     
@@ -1684,25 +1714,17 @@ public class ComposerWindow : Gtk.Window {
         if (compose_type != ComposeType.NEW_MESSAGE)
             return;
         
-        // Since we've set the combo box ID to the email addresses, we can
-        // fetch that and use it to grab the account from the engine.
-        string? id = from_multiple.get_active_id();
-        Geary.AccountInformation? new_account_info = null;
+        int index = from_multiple.get_active();
+        if (index < 0)
+            return;
         
-        if (id != null) {
-            try {
-                new_account_info = Geary.Engine.instance.get_accounts().get(id);
-                if (new_account_info != null) {
-                    account = Geary.Engine.instance.get_account_instance(new_account_info);
-                    from = new_account_info.get_from().to_rfc822_string();
-                    set_entry_completions();
-                    
-                    open_drafts_folder_async.begin(cancellable_drafts);
-                }
-            } catch (Error e) {
-                debug("Error updating account in Composer: %s", e.message);
-            }
-        }
+        assert(from_list.size > index);
+        account = from_list.get(index).account;
+        from = new Geary.RFC822.MailboxAddresses.single(new Geary.RFC822.MailboxAddress(
+            account.information.real_name, from_list.get(index).email)).to_rfc822_string();
+        set_entry_completions();
+        
+        open_drafts_folder_async.begin(cancellable_drafts);
         
         reset_draft_timer();
     }

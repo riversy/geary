@@ -10,6 +10,7 @@ public class Geary.AccountInformation : BaseObject {
     private const string GROUP = "AccountInformation";
     private const string REAL_NAME_KEY = "real_name";
     private const string NICKNAME_KEY = "nickname";
+    private const string ALTERNATE_EMAILS_KEY = "alternate_emails";
     private const string SERVICE_PROVIDER_KEY = "service_provider";
     private const string ORDINAL_KEY = "ordinal";
     private const string PREFETCH_PERIOD_DAYS_KEY = "prefetch_period_days";
@@ -55,6 +56,7 @@ public class Geary.AccountInformation : BaseObject {
     public string real_name { get; set; }
     public string nickname { get; set; }
     public string email { get; set; }
+    public Gee.List<string>? alternate_emails { get; set; }
     public Geary.ServiceProvider service_provider { get; set; }
     public int prefetch_period_days { get; set; }
     
@@ -120,6 +122,9 @@ public class Geary.AccountInformation : BaseObject {
         } finally {
             real_name = get_string_value(key_file, GROUP, REAL_NAME_KEY);
             nickname = get_string_value(key_file, GROUP, NICKNAME_KEY);
+            alternate_emails = get_string_list_value(key_file, GROUP, ALTERNATE_EMAILS_KEY);
+            if (alternate_emails.size == 0)
+                alternate_emails = null;
             imap_credentials.user = get_string_value(key_file, GROUP, IMAP_USERNAME_KEY, email);
             imap_remember_password = get_bool_value(key_file, GROUP, IMAP_REMEMBER_PASSWORD_KEY, true);
             smtp_credentials.user = get_string_value(key_file, GROUP, SMTP_USERNAME_KEY, email);
@@ -173,6 +178,12 @@ public class Geary.AccountInformation : BaseObject {
         real_name = from.real_name;
         nickname = from.nickname;
         email = from.email;
+        alternate_emails = null;
+        if (from.alternate_emails != null) {
+            alternate_emails = new Gee.ArrayList<string>();
+            foreach (string alternate_email in from.alternate_emails)
+                alternate_emails.add(alternate_email);
+        }
         service_provider = from.service_provider;
         prefetch_period_days = from.prefetch_period_days;
         save_sent_mail = from.save_sent_mail;
@@ -670,15 +681,15 @@ public class Geary.AccountInformation : BaseObject {
     /**
      * Returns a MailboxAddress object for this account.
      */
-    public RFC822.MailboxAddress get_mailbox_address() {
+    public RFC822.MailboxAddress get_primary_mailbox_address() {
         return new RFC822.MailboxAddress(real_name, email);
     }
     
     /**
      * Returns a MailboxAddresses object with this mailbox address.
      */
-    public RFC822.MailboxAddresses get_from() {
-        return new RFC822.MailboxAddresses.single(get_mailbox_address());
+    public RFC822.MailboxAddresses get_primary_from() {
+        return new RFC822.MailboxAddresses.single(get_primary_mailbox_address());
     }
     
     public static int compare_ascending(AccountInformation a, AccountInformation b) {
