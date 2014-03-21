@@ -187,6 +187,7 @@ public class ComposerWindow : Gtk.Window {
     private bool action_flag = false;
     private bool is_attachment_overlay_visible = false;
     private Gee.List<Geary.Attachment>? pending_attachments = null;
+    private string? preferred_from_address = null;
     
     private Geary.FolderSupport.Create? drafts_folder = null;
     private Geary.EmailIdentifier? draft_id = null;
@@ -336,7 +337,9 @@ public class ComposerWindow : Gtk.Window {
         from_multiple.changed.connect(on_from_changed);
         
         if (referred != null) {
-           switch (compose_type) {
+            set_preferred_from_address(referred, compose_type);
+            
+            switch (compose_type) {
                 case ComposeType.NEW_MESSAGE:
                     if (referred.to != null)
                         to = referred.to.to_rfc822_string();
@@ -515,6 +518,32 @@ public class ComposerWindow : Gtk.Window {
                 add_attachment(File.new_for_path(attachment));
             foreach (string attachment in headers.get("attachment"))
                 add_attachment(File.new_for_path(attachment));
+        }
+    }
+    
+    private bool check_preferred_from_address(Gee.List<string> account_addresses,
+        Geary.RFC822.MailboxAddresses? referred_addresses) {
+        if (referred_addresses != null) {
+            foreach (string address in account_addresses) {
+                if (referred_addresses.contains(address)) {
+                    preferred_from_address = address;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    private void set_preferred_from_address(Geary.Email referred, ComposeType compose_type) {
+        if (compose_type == ComposeType.NEW_MESSAGE) {
+            if (referred.from != null)
+                preferred_from_address = referred.from.to_rfc822_string();
+        } else {
+            Gee.List<string> account_addresses = account.information.get_all_email_addresses();
+            if (!check_preferred_from_address(account_addresses, referred.to)) {
+                if (!check_preferred_from_address(account_addresses, referred.cc))
+                    check_preferred_from_address(account_addresses, referred.bcc);
+            }
         }
     }
     
@@ -1648,6 +1677,8 @@ public class ComposerWindow : Gtk.Window {
         from_multiple.append_text(account.information.get_primary_mailbox_address().to_rfc822_string());
         from_list.add(new FromAddressMap(account, account.information.email));
         
+        bool set_active = false;
+        int index = 1; // We already inserted the main address.
         if (account.information.alternate_emails != null) {
             foreach (string alternate_email in account.information.alternate_emails) {
                 string rfc822_address = new Geary.RFC822.MailboxAddress(
@@ -1658,8 +1689,18 @@ public class ComposerWindow : Gtk.Window {
                 string display = _("%1$s via %2$s").printf(rfc822_address, account.information.email);
                 from_multiple.append_text(display);
                 from_list.add(new FromAddressMap(account, alternate_email));
+                
+                if (!set_active && preferred_from_address == alternate_email) {
+                    from_multiple.set_active(index);
+                    set_active = true;
+                }
+                
+                index++;
             }
         }
+        
+        if (!set_active)
+            from_multiple.set_active(0);
     }
     
     private void update_from_field() {
@@ -1701,13 +1742,8 @@ public class ComposerWindow : Gtk.Window {
                     debug("Error getting account in composer: %s", e.message);
                 }
             }
-            
-            from_multiple.set_active(0);
         } else {
             add_account_emails_to_from_list(account);
-            
-            // TODO: select address the original message was to, if available.
-            from_multiple.set_active(0);
         }
     }
     
