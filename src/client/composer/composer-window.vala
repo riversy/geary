@@ -469,9 +469,8 @@ public class ComposerWindow : Gtk.Window {
         chain.append(button_area);
         box.set_focus_chain(chain);
         
-        // If there's only one account, open the drafts folder.  If there's more than one account,
+        // If there's only one From option, open the drafts folder.  If there's more than one,
         // the drafts folder will be opened by on_from_changed().
-        // TODO: determine if there's only one account, not just if the combo box is visible
         if (!from_multiple.visible)
             open_drafts_folder_async.begin(cancellable_drafts);
     }
