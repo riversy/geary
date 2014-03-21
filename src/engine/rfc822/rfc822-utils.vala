@@ -69,14 +69,22 @@ private void remove_address(Gee.List<Geary.RFC822.MailboxAddress> addresses,
     }
 }
 
+private bool email_is_from_sender(Geary.Email email, Gee.List<string>? sender_addresses) {
+    if (sender_addresses == null)
+        return false;
+    
+    return Geary.traverse<string>(sender_addresses).any(a =>
+        !String.is_empty(a) && email.from.contains(a));
+}
+
 public string create_to_addresses_for_reply(Geary.Email email,
-    string? sender_address = null) {
+    Gee.List<string>? sender_addresses = null) {
     Gee.List<Geary.RFC822.MailboxAddress> new_to =
         new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
     
     // If we're replying to something we sent, send it to the same people we originally did.
     // Otherwise, we'll send to the reply-to address or the from address.
-    if (email.to != null && !String.is_empty(sender_address) && email.from.contains(sender_address))
+    if (email.to != null && email_is_from_sender(email, sender_addresses))
         new_to.add_all(email.to.get_all());
     else if (email.reply_to != null)
         new_to.add_all(email.reply_to.get_all());
@@ -84,29 +92,36 @@ public string create_to_addresses_for_reply(Geary.Email email,
         new_to.add_all(email.from.get_all());
     
     // Exclude the current sender.  No need to receive the mail they're sending.
-    if (!String.is_empty(sender_address))
-        remove_address(new_to, sender_address);
+    if (sender_addresses != null) {
+        foreach (string address in sender_addresses) {
+            if (!String.is_empty(address))
+                remove_address(new_to, address);
+        }
+    }
     
     return new_to.size > 0 ? new Geary.RFC822.MailboxAddresses(new_to).to_rfc822_string() : "";
 }
 
 public string create_cc_addresses_for_reply_all(Geary.Email email,
-    string? sender_address = null) {
+    Gee.List<string>? sender_addresses = null) {
     Gee.List<Geary.RFC822.MailboxAddress> new_cc = new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
     
     // If we're replying to something we received, also add other recipients.  Don't do this for
     // emails we sent, since everyone we sent it to is already covered in
     // create_to_addresses_for_reply().
-    if (email.to != null && (String.is_empty(sender_address) ||
-        !email.from.contains(sender_address)))
+    if (email.to != null && !email_is_from_sender(email, sender_addresses))
         new_cc.add_all(email.to.get_all());
     
     if (email.cc != null)
         new_cc.add_all(email.cc.get_all());
     
     // Again, exclude the current sender.
-    if (!String.is_empty(sender_address))
-        remove_address(new_cc, sender_address, true);
+    if (sender_addresses != null) {
+        foreach (string address in sender_addresses) {
+            if (!String.is_empty(address))
+                remove_address(new_cc, address, true);
+        }
+    }
     
     return new_cc.size > 0 ? new Geary.RFC822.MailboxAddresses(new_cc).to_rfc822_string() : "";
 }

@@ -209,6 +209,17 @@ public class Geary.AccountInformation : BaseObject {
     }
     
     /**
+     * Return a list of the primary and all alternate email addresses.
+     */
+    public Gee.List<string> get_all_email_addresses() {
+        Gee.ArrayList<string> all = new Gee.ArrayList<string>();
+        all.add(email);
+        if (alternate_emails != null)
+            all.add_all(alternate_emails);
+        return all;
+    }
+    
+    /**
      * Return whether this account allows setting the save_sent_mail option.
      * If not, save_sent_mail will always be true and setting it will be
      * ignored.

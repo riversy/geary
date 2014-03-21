@@ -364,11 +364,10 @@ public class ComposerWindow : Gtk.Window {
                 
                 case ComposeType.REPLY:
                 case ComposeType.REPLY_ALL:
-                    // TODO: find alternate email address?
-                    string? sender_address = account.information.email;
-                    to = Geary.RFC822.Utils.create_to_addresses_for_reply(referred, sender_address);
+                    Gee.List<string> sender_addresses = account.information.get_all_email_addresses();
+                    to = Geary.RFC822.Utils.create_to_addresses_for_reply(referred, sender_addresses);
                     if (compose_type == ComposeType.REPLY_ALL)
-                        cc = Geary.RFC822.Utils.create_cc_addresses_for_reply_all(referred, sender_address);
+                        cc = Geary.RFC822.Utils.create_cc_addresses_for_reply_all(referred, sender_addresses);
                     subject = Geary.RFC822.Utils.create_subject_for_reply(referred);
                     in_reply_to = referred.message_id.value;
                     references = Geary.RFC822.Utils.reply_references(referred);
