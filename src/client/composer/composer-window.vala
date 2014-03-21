@@ -1748,9 +1748,6 @@ public class ComposerWindow : Gtk.Window {
     }
     
     private void on_from_changed() {
-        if (compose_type != ComposeType.NEW_MESSAGE)
-            return;
-        
         int index = from_multiple.get_active();
         if (index < 0)
             return;
