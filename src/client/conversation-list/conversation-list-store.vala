@@ -35,7 +35,7 @@ public class ConversationListStore : Gtk.ListStore {
         }
     }
     
-    public string? account_owner_email { get; set; default = null; }
+    public Gee.List<string>? account_owner_emails { get; set; default = null; }
     public Geary.ProgressMonitor preview_monitor { get; private set; default = 
         new Geary.SimpleProgressMonitor(Geary.ProgressType.ACTIVITY); }
     
@@ -251,7 +251,7 @@ public class ConversationListStore : Gtk.ListStore {
     
     private void set_row(Gtk.TreeIter iter, Geary.App.Conversation conversation, Geary.Email preview) {
         FormattedConversationData conversation_data = new FormattedConversationData(conversation,
-            preview, current_folder, account_owner_email);
+            preview, current_folder, account_owner_emails);
         set(iter,
             Column.CONVERSATION_DATA, conversation_data,
             Column.CONVERSATION_OBJECT, conversation);

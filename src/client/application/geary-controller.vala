@@ -859,8 +859,9 @@ public class GearyController : Geary.BaseObject {
         account.sending_monitor.start.disconnect(on_sending_started);
         account.sending_monitor.finish.disconnect(on_sending_finished);
         
-        if (main_window.conversation_list_store.account_owner_email == account.information.email)
-            main_window.conversation_list_store.account_owner_email = null;
+        if (main_window.conversation_list_store.account_owner_emails != null
+            && account.information.email in main_window.conversation_list_store.account_owner_emails)
+            main_window.conversation_list_store.account_owner_emails = null;
         main_window.folder_list.remove_account(account);
         
         if (inboxes.has_key(account)) {
@@ -1045,7 +1046,7 @@ public class GearyController : Geary.BaseObject {
             previous_non_search_folder = current_folder;
         
         main_window.conversation_list_store.set_current_folder(current_folder, conversation_cancellable);
-        main_window.conversation_list_store.account_owner_email = current_account.information.email;
+        main_window.conversation_list_store.account_owner_emails = current_account.information.get_all_email_addresses();
         
         main_window.main_toolbar.copy_folder_menu.clear();
         main_window.main_toolbar.move_folder_menu.clear();
