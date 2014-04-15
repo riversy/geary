@@ -456,7 +456,8 @@ public class Geary.AccountInformation : BaseObject {
                     imap_flags |= Endpoint.Flags.STARTTLS;
                 
                 return new Endpoint(default_imap_server_host, default_imap_server_port,
-                    imap_flags, Imap.ClientConnection.RECOMMENDED_TIMEOUT_SEC);
+                    imap_flags, Imap.ClientConnection.RECOMMENDED_TIMEOUT_SEC,
+                    Imap.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
             
             default:
                 assert_not_reached();
@@ -482,7 +483,8 @@ public class Geary.AccountInformation : BaseObject {
                     smtp_flags |= Endpoint.Flags.STARTTLS;
                 
                 return new Endpoint(default_smtp_server_host, default_smtp_server_port,
-                    smtp_flags, Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC);
+                    smtp_flags, Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC,
+                    Smtp.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
             
             default:
                 assert_not_reached();

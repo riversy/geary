@@ -25,10 +25,10 @@ public class Geary.Imap.ClientConnection : BaseObject {
     
     /**
      * The default timeout for an issued command to result in a response code from the server.
-     *
-     * @see command_timeout_sec
      */
     public const uint DEFAULT_COMMAND_TIMEOUT_SEC = 15;
+    public const uint MAX_COMMAND_TIMEOUT_SEC = 60;
+    public const uint INCREMENT_COMMAND_TIMEOUT_SEC = 5;
     
     private const int FLUSH_TIMEOUT_MSEC = 10;
     
@@ -83,16 +83,6 @@ public class Geary.Imap.ClientConnection : BaseObject {
     
     // Used solely for debugging
     private static int next_cx_id = 0;
-    
-    /**
-     * The timeout in seconds before an uncompleted {@link Command} is considered abandoned.
-     *
-     * ClientConnection does not time out the initial greeting from the server (as there's no
-     * command associated with it).  That's the responsibility of the caller.
-     *
-     * A timed-out command will result in the connection being forcibly closed.
-     */
-    public uint command_timeout_sec { get; set; default = DEFAULT_COMMAND_TIMEOUT_SEC; }
     
     /**
      * This identifier is used only for debugging, to differentiate connections from one another
@@ -755,7 +745,7 @@ public class Geary.Imap.ClientConnection : BaseObject {
         timeout_cmd_count++;
         
         if (timeout_id == 0)
-            timeout_id = Timeout.add_seconds(command_timeout_sec, on_cmd_timeout);
+            timeout_id = Timeout.add_seconds(endpoint.command_timeout_sec, on_cmd_timeout);
     }
     
     private void cmd_completed_timeout() {
@@ -771,7 +761,7 @@ public class Geary.Imap.ClientConnection : BaseObject {
     private void increase_timeout() {
         if (timeout_id != 0) {
             Source.remove(timeout_id);
-            timeout_id = Timeout.add_seconds(command_timeout_sec, on_cmd_timeout);
+            timeout_id = Timeout.add_seconds(endpoint.command_timeout_sec, on_cmd_timeout);
         }
     }
     
@@ -796,7 +786,10 @@ public class Geary.Imap.ClientConnection : BaseObject {
         timeout_cmd_count = 0;
         
         receive_failure(new ImapError.TIMED_OUT("No response to command(s) after %u seconds",
-            command_timeout_sec));
+            endpoint.command_timeout_sec));
+        
+        // increment after formatting error, above
+        endpoint.increment_command_timeout_sec(INCREMENT_COMMAND_TIMEOUT_SEC, MAX_COMMAND_TIMEOUT_SEC);
         
         return false;
     }

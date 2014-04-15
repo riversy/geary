@@ -11,6 +11,11 @@ public class Geary.Smtp.ClientConnection {
     
     public const uint DEFAULT_TIMEOUT_SEC = 60;
     
+    /**
+     * This is currently not respected by {@link ClientConnection}, but added here for future use.
+     */
+    public const uint DEFAULT_COMMAND_TIMEOUT_SEC = 60;
+    
     public Geary.Smtp.Capabilities? capabilities { get; private set; default = null; }
     
     private Geary.Endpoint endpoint;

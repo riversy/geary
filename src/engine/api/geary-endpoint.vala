@@ -10,6 +10,8 @@
  */
 
 public class Geary.Endpoint : BaseObject {
+    public const uint DEFAULT_COMMAND_TIMEOUT_SEC = 15;
+    
     [Flags]
     public enum Flags {
         NONE = 0,
@@ -34,9 +36,26 @@ public class Geary.Endpoint : BaseObject {
     
     public NetworkAddress remote_address { get; private set; }
     public Flags flags { get; private set; }
-    public uint timeout_sec { get; private set; }
+    public uint connection_timeout_sec { get; private set; }
     public TlsCertificateFlags tls_validation_flags { get; set; default = TlsCertificateFlags.VALIDATE_ALL; }
     public bool force_ssl3 { get; set; default = false; }
+    /**
+     * The baseline command timeout in seconds, to be determined by the connection layer or
+     * protocol specifications.
+     *
+     * @see command_timeout_sec
+     */
+    public uint initial_command_timeout_sec { get; set; default = DEFAULT_COMMAND_TIMEOUT_SEC; }
+    /**
+     * Not set or enforced by {@link Endpoint}, this is persistent state that can be used by the
+     * connection layer to track transactional (versus connection-based) timeouts.
+     *
+     * This cannot be changed directly, use {@link increment_command_timeout} and
+     * {@link reset_command_timeout} to update.
+     *
+     * @see initial_command_timeout_sec
+     */
+    public uint command_timeout_sec { get; private set; }
     
     public bool is_ssl { get {
         return flags.is_all_set(Flags.SSL);
@@ -48,10 +67,13 @@ public class Geary.Endpoint : BaseObject {
     
     private SocketClient? socket_client = null;
     
-    public Endpoint(string host_specifier, uint16 default_port, Flags flags, uint timeout_sec) {
+    public Endpoint(string host_specifier, uint16 default_port, Flags flags, uint connection_timeout_sec,
+        uint command_timeout_sec) {
         this.remote_address = new NetworkAddress(host_specifier, default_port);
         this.flags = flags;
-        this.timeout_sec = timeout_sec;
+        this.connection_timeout_sec = connection_timeout_sec;
+        initial_command_timeout_sec = command_timeout_sec;
+        this.command_timeout_sec = initial_command_timeout_sec;
     }
     
     public SocketClient get_socket_client() {
@@ -66,7 +88,7 @@ public class Geary.Endpoint : BaseObject {
             socket_client.event.connect(on_socket_client_event);
         }
 
-        socket_client.set_timeout(timeout_sec);
+        socket_client.set_timeout(connection_timeout_sec);
 
         return socket_client;
     }
@@ -190,6 +212,28 @@ public class Geary.Endpoint : BaseObject {
             return AttemptStarttls.HALT;
         
         return AttemptStarttls.YES;
+    }
+    
+    /**
+     * Increment the {@link command_timeout_sec}, generally due to a transaction or request taking
+     * too long, possibly due to line problems.
+     *
+     * @returns Updated command_timeout_sec
+     */
+    public uint increment_command_timeout_sec(uint increment_sec, uint max_sec) {
+        return command_timeout_sec = Numeric.uint_ceiling(command_timeout_sec + increment_sec, max_sec);
+    }
+    
+    /**
+     * Reset the {@link command_timeout_sec}, generally if some indication is made that network
+     * congestion has subsided or network conditions have changed.
+     *
+     * This resets command_timeout_sec to {@link initial_command_timeout_sec}.
+     *
+     * @returns Updated command_timeout_sec, i.e. initial_command_timeout_sec
+     */
+    public uint reset_command_timeout_sec() {
+        return command_timeout_sec = initial_command_timeout_sec;
     }
     
     public string to_string() {

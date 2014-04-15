@@ -12,7 +12,8 @@ private class Geary.ImapEngine.YahooAccount : Geary.ImapEngine.GenericAccount {
                 "imap.mail.yahoo.com",
                 Imap.ClientConnection.DEFAULT_PORT_SSL,
                 Geary.Endpoint.Flags.SSL | Geary.Endpoint.Flags.GRACEFUL_DISCONNECT,
-                Imap.ClientConnection.RECOMMENDED_TIMEOUT_SEC);
+                Imap.ClientConnection.RECOMMENDED_TIMEOUT_SEC,
+                Imap.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
         }
         
         return _imap_endpoint;
@@ -25,7 +26,8 @@ private class Geary.ImapEngine.YahooAccount : Geary.ImapEngine.GenericAccount {
                 "smtp.mail.yahoo.com",
                 Smtp.ClientConnection.DEFAULT_PORT_SSL,
                 Geary.Endpoint.Flags.SSL | Geary.Endpoint.Flags.GRACEFUL_DISCONNECT,
-                Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC);
+                Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC,
+                Smtp.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
         }
         
         return _smtp_endpoint;

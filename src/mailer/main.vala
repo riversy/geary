@@ -130,14 +130,16 @@ int main(string[] args) {
     if (arg_gmail) {
         endpoint = new Geary.Endpoint("smtp.gmail.com", Geary.Smtp.ClientConnection.DEFAULT_PORT_STARTTLS,
             Geary.Endpoint.Flags.STARTTLS | Geary.Endpoint.Flags.GRACEFUL_DISCONNECT,
-            Geary.Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC);
+            Geary.Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC,
+            Geary.Smtp.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
     } else {
         Geary.Endpoint.Flags flags = Geary.Endpoint.Flags.GRACEFUL_DISCONNECT;
         if (!arg_no_tls)
             flags |= Geary.Endpoint.Flags.SSL;
         
         endpoint = new Geary.Endpoint(arg_hostname, (uint16) arg_port, flags,
-            Geary.Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC);
+            Geary.Smtp.ClientConnection.DEFAULT_TIMEOUT_SEC,
+            Geary.Smtp.ClientConnection.DEFAULT_COMMAND_TIMEOUT_SEC);
     }
 
     stdout.printf("Enabling debug: %s\n", arg_debug.to_string());
