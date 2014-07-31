@@ -766,14 +766,11 @@ public class Geary.RFC822.Message : BaseObject {
             if ((part_disposition == Mime.DispositionType.INLINE || part_disposition == Mime.DispositionType.UNSPECIFIED)
                 && content_type.has_media_type("text")
                 && (content_type.has_media_subtype("html") || content_type.has_media_subtype("plain"))) {
-                // these are part of the body
                 return;
             }
         }
         
-        // Catch remaining disposition-type matches
-        if (requested_disposition == Mime.DispositionType.UNSPECIFIED || part_disposition == requested_disposition)
-            attachments.add(part);
+        attachments.add(part);
     }
     
     public Gee.List<Geary.RFC822.Message> get_sub_messages() {
