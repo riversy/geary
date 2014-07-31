@@ -422,8 +422,6 @@ private class Geary.ImapDB.Database : Geary.Db.VersionedDatabase {
                 if (results.finished)
                     return Db.TransactionOutcome.ROLLBACK;
                 
-                Gee.HashSet<int64?> deleted_ids = new Gee.HashSet<int64?>(
-                    Collection.int64_hash_func, Collection.int64_equal_func);
                 do {
                     int64 message_id = results.rowid_at(0);
                     Geary.Memory.Buffer header = results.string_buffer_at(1);
@@ -441,16 +439,6 @@ private class Geary.ImapDB.Database : Geary.Db.VersionedDatabase {
                     
                     // build a list of attachments in the message itself
                     Gee.List<GMime.Part> msg_attachments = message.get_attachments();
-                    
-                    // get known attachments stored in database and on disk
-                    Gee.List<Geary.Attachment>? known_attachments = ImapDB.Folder.do_list_attachments(
-                        cx, message_id, null);
-                    int known_attachments_count = (known_attachments != null)
-                        ? known_attachments.size : 0;
-                    
-                    // if the same count, consider all present and accounted for
-                    if (msg_attachments.size == known_attachments_count)
-                        continue;
                     
                     // delete all attachments for this message
                     try {
@@ -470,33 +458,10 @@ private class Geary.ImapDB.Database : Geary.Db.VersionedDatabase {
                         
                         // fallthrough
                     }
-                    
-                    deleted_ids.add(message_id);
                 } while (results.next());
                 
-                // rebuild rows with potentially new attachments
-                if (deleted_ids.size > 0) {
-                    StringBuilder builder = new StringBuilder("""
-                        DELETE FROM MessageSearchTable WHERE docid IN (
-                    """);
-                    bool first = true;
-                    foreach (int64 message_id in deleted_ids) {
-                        if (!first)
-                            builder.append(", ");
-                        
-                        builder.append(message_id.to_string());
-                        first = false;
-                    }
-                    builder.append(")");
-                    
-                    try {
-                        cx.exec(builder.str);
-                    } catch (Error err) {
-                        debug("Unable to do partial delete of search table: %s", err.message);
-                        
-                        throw err;
-                    }
-                }
+                // rebuild search table due to potentially new attachments
+                cx.exec("DELETE FROM MessageSearchTable");
                 
                 return Db.TransactionOutcome.COMMIT;
             });
