@@ -1,0 +1,4 @@
+--
+-- Dummy database upgrade to repopulate attachments.  Bug #713830 revealed that
+-- non-text and non-image files with no Content-Disposition were being dropped.
+--

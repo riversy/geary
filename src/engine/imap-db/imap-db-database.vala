@@ -105,6 +105,10 @@ private class Geary.ImapDB.Database : Geary.Db.VersionedDatabase {
             case 19:
                 post_upgrade_validate_contacts();
             break;
+            
+            case 22:
+                post_rebuild_attachments();
+            break;
         }
     }
     
@@ -399,6 +403,106 @@ private class Geary.ImapDB.Database : Geary.Db.VersionedDatabase {
             });
         } catch (Error e) {
             debug("Error fixing up contacts table: %s", e.message);
+        }
+    }
+    
+    // Version 22
+    private void post_rebuild_attachments() {
+        try {
+            exec_transaction(Db.TransactionType.RW, (cx) => {
+                Db.Statement stmt = cx.prepare("""
+                    SELECT id, header, body
+                    FROM MessageTable
+                    WHERE (fields & ?) = ?
+                    """);
+                stmt.bind_int(0, Geary.Email.REQUIRED_FOR_MESSAGE);
+                stmt.bind_int(1, Geary.Email.REQUIRED_FOR_MESSAGE);
+                
+                Db.Result results = stmt.exec();
+                if (results.finished)
+                    return Db.TransactionOutcome.ROLLBACK;
+                
+                Gee.HashSet<int64?> deleted_ids = new Gee.HashSet<int64?>(
+                    Collection.int64_hash_func, Collection.int64_equal_func);
+                do {
+                    int64 message_id = results.rowid_at(0);
+                    Geary.Memory.Buffer header = results.string_buffer_at(1);
+                    Geary.Memory.Buffer body = results.string_buffer_at(2);
+                    
+                    Geary.RFC822.Message message;
+                    try {
+                        message = new Geary.RFC822.Message.from_parts(
+                            new RFC822.Header(header), new RFC822.Text(body));
+                    } catch (Error err) {
+                        debug("Error decoding message: %s", err.message);
+                        
+                        continue;
+                    }
+                    
+                    // build a list of attachments in the message itself
+                    Gee.List<GMime.Part> msg_attachments = message.get_attachments();
+                    
+                    // get known attachments stored in database and on disk
+                    Gee.List<Geary.Attachment>? known_attachments = ImapDB.Folder.do_list_attachments(
+                        cx, message_id, null);
+                    int known_attachments_count = (known_attachments != null)
+                        ? known_attachments.size : 0;
+                    
+                    // if the same count, consider all present and accounted for
+                    if (msg_attachments.size == known_attachments_count)
+                        continue;
+                    
+                    // delete all attachments for this message
+                    try {
+                        Geary.ImapDB.Folder.do_delete_attachments(cx, message_id);
+                    } catch (Error err) {
+                        debug("Error deleting existing attachments: %s", err.message);
+                        
+                        continue;
+                    }
+                    
+                    // rebuild all
+                    try {
+                        Geary.ImapDB.Folder.do_save_attachments_db(cx, message_id, msg_attachments,
+                            this, null);
+                    } catch (Error err) {
+                        debug("Error saving attachments: %s", err.message);
+                        
+                        // fallthrough
+                    }
+                    
+                    deleted_ids.add(message_id);
+                } while (results.next());
+                
+                // rebuild rows with potentially new attachments
+                if (deleted_ids.size > 0) {
+                    StringBuilder builder = new StringBuilder("""
+                        DELETE FROM MessageSearchTable WHERE docid IN (
+                    """);
+                    bool first = true;
+                    foreach (int64 message_id in deleted_ids) {
+                        if (!first)
+                            builder.append(", ");
+                        
+                        builder.append(message_id.to_string());
+                        first = false;
+                    }
+                    builder.append(")");
+                    
+                    try {
+                        cx.exec(builder.str);
+                    } catch (Error err) {
+                        debug("Unable to do partial delete of search table: %s", err.message);
+                        
+                        throw err;
+                    }
+                }
+                
+                return Db.TransactionOutcome.COMMIT;
+            });
+        } catch (Error e) {
+            debug("Error populating old inline attachments during upgrade to database schema 13: %s",
+                e.message);
         }
     }
     

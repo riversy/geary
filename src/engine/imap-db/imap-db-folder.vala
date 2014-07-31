@@ -1871,7 +1871,7 @@ private class Geary.ImapDB.Folder : BaseObject, Geary.ReferenceSemantics {
         unread_count_change += new_unread_count;
     }
     
-    private static Gee.List<Geary.Attachment>? do_list_attachments(Db.Connection cx, int64 message_id,
+    public static Gee.List<Geary.Attachment>? do_list_attachments(Db.Connection cx, int64 message_id,
         Cancellable? cancellable) throws Error {
         Db.Statement stmt = cx.prepare("""
             SELECT id, filename, mime_type, filesize, disposition
@@ -1909,8 +1909,9 @@ private class Geary.ImapDB.Folder : BaseObject, Geary.ReferenceSemantics {
             return;
         
         foreach (GMime.Part attachment in attachments) {
-            string mime_type = attachment.get_content_type().to_string();
-            string disposition = attachment.get_disposition();
+            unowned GMime.ContentType? content_type = attachment.get_content_type();
+            string mime_type = (content_type != null) ? content_type.to_string() : "application/octet-stream";
+            string? disposition = attachment.get_disposition();
             string filename = RFC822.Utils.get_clean_attachment_filename(attachment);
             
             // Convert the attachment content into a usable ByteArray.
@@ -1999,6 +2000,30 @@ private class Geary.ImapDB.Folder : BaseObject, Geary.ReferenceSemantics {
                 throw error;
             }
         }
+    }
+    
+    public static void do_delete_attachments(Db.Connection cx, int64 message_id)
+        throws Error {
+        Gee.List<Geary.Attachment>? attachments = do_list_attachments(cx, message_id, null);
+        if (attachments == null || attachments.size == 0)
+            return;
+        
+        // delete all files
+        foreach (Geary.Attachment attachment in attachments) {
+            try {
+                attachment.file.delete(null);
+            } catch (Error err) {
+                debug("Unable to delete file %s: %s", attachment.file.get_path(), err.message);
+            }
+        }
+        
+        // remove all from attachment table
+        Db.Statement stmt = new Db.Statement(cx, """
+            DELETE FROM MessageAttachmentTable WHERE message_id = ?
+        """);
+        stmt.bind_rowid(0, message_id);
+        
+        stmt.exec();
     }
     
     /**
