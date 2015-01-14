@@ -1870,10 +1870,19 @@ public class GearyController : Geary.BaseObject {
             return;
         
         Geary.FolderSupport.Move? supports_move = current_folder as Geary.FolderSupport.Move;
-        if (supports_move == null)
-            return;
-        
-        supports_move.move_email_async.begin(ids, destination.path, cancellable_folder);
+        if (supports_move != null)
+            move_conversation_async.begin(supports_move, ids, destination.path, cancellable_folder);
+    }
+    
+    private async void move_conversation_async(Geary.FolderSupport.Move source_folder,
+        Gee.List<Geary.EmailIdentifier> ids, Geary.FolderPath destination, Cancellable? cancellable) {
+        try {
+            save_revokable(yield source_folder.move_email_async(ids, destination, cancellable),
+                _("Undo move"));
+        } catch (Error err) {
+            debug("%s: Unable to move %d emails: %s", source_folder.to_string(), ids.size,
+                err.message);
+        }
     }
     
     private void on_open_attachment(Geary.Attachment attachment) {
@@ -2395,10 +2404,13 @@ public class GearyController : Geary.BaseObject {
             debug("Archiving selected messages");
             
             Geary.FolderSupport.Archive? supports_archive = current_folder as Geary.FolderSupport.Archive;
-            if (supports_archive == null)
+            if (supports_archive == null) {
                 debug("Folder %s doesn't support archive", current_folder.to_string());
-            else
-                yield supports_archive.archive_email_async(ids, cancellable);
+            } else {
+                save_revokable(yield supports_archive.archive_email_async(ids, cancellable),
+                    _("Undo archive"));
+            }
+            
             return;
         }
         
@@ -2410,7 +2422,9 @@ public class GearyController : Geary.BaseObject {
                     Geary.SpecialFolderType.TRASH, cancellable)).path;
                 Geary.FolderSupport.Move? supports_move = current_folder as Geary.FolderSupport.Move;
                 if (supports_move != null) {
-                    yield supports_move.move_email_async(ids, trash_path, cancellable);
+                    save_revokable(yield supports_move.move_email_async(ids, trash_path, cancellable),
+                        _("Undo trash"));
+                    
                     return;
                 }
             }

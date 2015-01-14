@@ -1297,18 +1297,25 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         return copy.destination_uids.size > 0 ? copy.destination_uids : null;
     }
 
-    public virtual async void move_email_async(Gee.List<Geary.EmailIdentifier> to_move,
+    public virtual async Geary.Revokable? move_email_async(Gee.List<Geary.EmailIdentifier> to_move,
         Geary.FolderPath destination, Cancellable? cancellable = null) throws Error {
         check_open("move_email_async");
         check_ids("move_email_async", to_move);
         
         // watch for moving to this folder, which is treated as a no-op
         if (destination.equal_to(path))
-            return;
+            return null;
         
         MoveEmail move = new MoveEmail(this, (Gee.List<ImapDB.EmailIdentifier>) to_move, destination);
         replay_queue.schedule(move);
+        
         yield move.wait_for_ready_async(cancellable);
+        
+        // If no COPYUIDs returned, can't revoke this operation
+        if (move.destination_uids.size == 0)
+            return null;
+        
+        return new RevokableMove(_account, path, destination, move.destination_uids);
     }
     
     private void on_email_flags_changed(Gee.Map<Geary.EmailIdentifier, Geary.EmailFlags> changed) {

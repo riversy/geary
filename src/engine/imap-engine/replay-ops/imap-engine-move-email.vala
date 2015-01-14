@@ -5,6 +5,8 @@
  */
 
 private class Geary.ImapEngine.MoveEmail : Geary.ImapEngine.SendReplayOperation {
+    public Gee.Set<Imap.UID> destination_uids = new Gee.HashSet<Imap.UID>();
+    
     private MinimalFolder engine;
     private Gee.List<ImapDB.EmailIdentifier> to_move = new Gee.ArrayList<ImapDB.EmailIdentifier>();
     private Geary.FolderPath destination;
@@ -70,9 +72,14 @@ private class Geary.ImapEngine.MoveEmail : Geary.ImapEngine.SendReplayOperation 
         Gee.List<Imap.MessageSet> msg_sets = Imap.MessageSet.uid_sparse(
             ImapDB.EmailIdentifier.to_uids(moved_ids));
         foreach (Imap.MessageSet msg_set in msg_sets) {
-            yield engine.remote_folder.copy_email_async(msg_set, destination, null);
-            yield engine.remote_folder.remove_email_async(msg_set.to_list(), null);
+            Gee.Map<Imap.UID, Imap.UID>? src_dst_uids = yield engine.remote_folder.copy_email_async(
+                msg_set, destination, null);
+            if (src_dst_uids != null)
+                destination_uids.add_all(src_dst_uids.values);
         }
+        
+        // delete all once all copied
+        yield engine.remote_folder.remove_email_async(msg_sets, null);
         
         return ReplayOperation.Status.COMPLETED;
     }

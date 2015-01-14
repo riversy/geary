@@ -535,6 +535,9 @@ private abstract class Geary.ImapEngine.GenericAccount : Geary.Account {
      * not be reflected in the local database unless there's a separate connection to the server
      * that is notified or detects these changes.
      *
+     * The returned Folder must be opened prior to use and closed once completed.  ''Leaving a
+     * Folder open will cause a connection leak.''
+     *
      * It is not recommended this object be held open long-term, or that its status or notifications
      * be directly written to the database unless you know exactly what you're doing.  ''Caveat
      * implementor.''
