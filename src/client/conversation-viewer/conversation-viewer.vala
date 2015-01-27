@@ -124,6 +124,9 @@ public class ConversationViewer : Gtk.Box {
     // Fired when the user clicks the edit draft button.
     public signal void edit_draft(Geary.Email message);
     
+    // Fired when the viewer has been cleared.
+    public signal void cleared();
+    
     // List of emails in this view.
     public Gee.TreeSet<Geary.Email> messages { get; private set; default = 
         new Gee.TreeSet<Geary.Email>(Geary.Email.compare_date_ascending); }
@@ -142,6 +145,9 @@ public class ConversationViewer : Gtk.Box {
     
     // Overlay containing any inline composers.
     public ScrollableOverlay compose_overlay;
+    
+    // Paned for holding any paned composers.
+    private Gtk.Box composer_boxes;
     
     // Maps emails to their corresponding elements.
     private Gee.HashMap<Geary.EmailIdentifier, WebKit.DOM.HTMLElement> email_to_element = new
@@ -169,6 +175,7 @@ public class ConversationViewer : Gtk.Box {
     private int next_replaced_buffer_number = 0;
     private Gee.HashMap<string, ReplacedImage> replaced_images = new Gee.HashMap<string, ReplacedImage>();
     private Gee.HashSet<string> replaced_content_ids = new Gee.HashSet<string>();
+    private Gee.HashSet<string> blacklist_ids = new Gee.HashSet<string>();
     
     public ConversationViewer() {
         Object(orientation: Gtk.Orientation.VERTICAL, spacing: 0);
@@ -215,13 +222,27 @@ public class ConversationViewer : Gtk.Box {
         
         message_overlay = new Gtk.Overlay();
         message_overlay.add(conversation_viewer_scrolled);
-        pack_start(message_overlay);
+        
+        Gtk.Paned composer_paned = new Gtk.Paned(Gtk.Orientation.VERTICAL);
+        composer_paned.pack1(message_overlay, true, false);
+        composer_boxes = new Gtk.Box(Gtk.Orientation.VERTICAL, 0);
+        composer_boxes.no_show_all = true;
+        composer_paned.pack2(composer_boxes, true, false);
+        Configuration config = GearyApplication.instance.config;
+        config.bind(Configuration.COMPOSER_PANE_POSITION_KEY, composer_paned, "position");
+        pack_start(composer_paned);
         
         conversation_find_bar = new ConversationFindBar(web_view);
         conversation_find_bar.no_show_all = true;
         conversation_find_bar.close.connect(() => { fsm.issue(SearchEvent.CLOSE_FIND_BAR); });
         
         pack_start(conversation_find_bar, false);
+    }
+    
+    public void set_paned_composer(ComposerWidget composer) {
+        ComposerBox container = new ComposerBox(composer);
+        composer_boxes.pack_start(container);
+        composer_boxes.show();
     }
     
     public Geary.Email? get_last_message() {
@@ -301,13 +322,54 @@ public class ConversationViewer : Gtk.Box {
         inlined_content_ids.clear();
         replaced_images.clear();
         replaced_content_ids.clear();
+        blacklist_ids.clear();
+        blacklist_css();
         
         current_account_information = account_information;
+        cleared();
     }
     
     // Converts an email ID into HTML ID used by the <div> for the email.
     public string get_div_id(Geary.EmailIdentifier id) {
         return "message_%s".printf(id.to_string());
+    }
+    
+    public void blacklist_by_id(Geary.EmailIdentifier? id) {
+        if (id == null)
+            return;
+        blacklist_ids.add(get_div_id(id));
+        blacklist_css();
+    }
+    
+    public void unblacklist_by_id(Geary.EmailIdentifier? id) {
+        if (id == null)
+            return;
+        blacklist_ids.remove(get_div_id(id));
+        blacklist_css();
+    }
+    
+    private void blacklist_css() {
+        GLib.StringBuilder rule = new GLib.StringBuilder();
+        bool first = true;
+        foreach (string id in blacklist_ids) {
+            if (!first)
+                rule.append(", ");
+            else
+                first = false;
+            rule.append("div[id=\"" + id + "\"]");
+        }
+        if (!first)
+            rule.append(" { display: none; }");
+        
+        WebKit.DOM.HTMLElement? style_element = web_view.get_dom_document()
+            .get_element_by_id("blacklist_ids") as WebKit.DOM.HTMLElement;
+        if (style_element != null) {
+            try {
+                style_element.set_inner_html(rule.str);
+            } catch (Error error) {
+                debug("Error setting blaklist CSS: %s", error.message);
+            }
+        }
     }
     
     private void show_special_message(string msg) {

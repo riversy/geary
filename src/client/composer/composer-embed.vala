@@ -17,6 +17,7 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
     private double inner_scroll_adj_value;
     private int inner_view_height;
     private int min_height = MIN_EDITOR_HEIGHT;
+    private bool has_accel_group = false;
     
     public Gtk.Window top_window {
         get { return (Gtk.Window) get_toplevel(); }
@@ -30,7 +31,7 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
         valign = Gtk.Align.FILL;
         
         WebKit.DOM.HTMLElement? email_element = null;
-        if (referred != null) {
+        if (referred != null && composer.state != ComposerWidget.ComposerState.INLINE_NEW) {
             email_element = conversation_viewer.web_view.get_dom_document().get_element_by_id(
                 conversation_viewer.get_div_id(referred.id)) as WebKit.DOM.HTMLElement;
             embed_id = referred.id.to_string() + "_reply";
@@ -127,8 +128,7 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
         get_style_context().changed.connect(update_style);
     }
     
-    public void on_detach() {
-        composer.state = ComposerWidget.ComposerState.DETACHED;
+    public Gtk.Widget? remove_composer() {
         if (composer.editor.has_focus)
             on_focus_out();
         composer.editor.focus_in_event.disconnect(on_focus_in);
@@ -138,7 +138,7 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
         disable_scroll_reroute(this);
         Gtk.ScrolledWindow win = (Gtk.ScrolledWindow) composer.editor.parent;
         win.get_vscrollbar().show();
-        Gtk.Widget focus = top_window.get_focus();
+        Gtk.Widget? focus = top_window.get_focus();
         
         try {
             composer.editor.get_dom_document().body.get_class_list().remove("embedded");
@@ -147,15 +147,8 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
         }
         
         remove(composer);
-        ComposerWindow window = new ComposerWindow(composer);
-        if (focus != null) {
-            ComposerWindow focus_win = focus.get_toplevel() as ComposerWindow;
-            if (focus_win != null && focus_win == window)
-                focus.grab_focus();
-        } else {
-            composer.set_focus();
-        }
         close_container();
+        return focus;
     }
     
     public bool set_position(ref Gdk.Rectangle allocation, double hscroll, double vscroll,
@@ -206,12 +199,16 @@ public class ComposerEmbed : Gtk.EventBox, ComposerContainer {
     }
     
     private bool on_focus_in() {
-        top_window.add_accel_group(composer.ui.get_accel_group());
+        // For some reason, on_focus_in gets called a bunch upon construction.
+        if (!has_accel_group)
+            top_window.add_accel_group(composer.ui.get_accel_group());
+        has_accel_group = true;
         return false;
     }
     
     private bool on_focus_out() {
         top_window.remove_accel_group(composer.ui.get_accel_group());
+        has_accel_group = false;
         return false;
     }
     

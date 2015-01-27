@@ -1270,7 +1270,7 @@ public class GearyController : Geary.BaseObject {
         
         debug("Switching to %s...", folder.to_string());
         
-        cancel_folder();
+        closed_folder();
         
         // This function is not reentrant.  It should be, because it can be
         // called reentrant-ly if you select folders quickly enough.  This
@@ -1283,13 +1283,10 @@ public class GearyController : Geary.BaseObject {
         Cancellable? conversation_cancellable = (current_is_inbox ?
             inbox_cancellables.get(folder.account) : cancellable_folder);
         
-        // stop monitoring for conversations and close the folder (but only if not an inbox,
-        // which we leave open for notifications)
+        // stop monitoring for conversations and close the folder
         if (current_conversations != null) {
-            yield current_conversations.stop_monitoring_async(!current_is_inbox, null);
+            yield current_conversations.stop_monitoring_async(null);
             current_conversations = null;
-        } else if (current_folder != null && !current_is_inbox) {
-            yield current_folder.close_async();
         }
         
         // re-enable copy/move to the last selected folder
@@ -1534,6 +1531,12 @@ public class GearyController : Geary.BaseObject {
         cancellable_folder = new Cancellable();
         
         old_cancellable.cancel();
+    }
+    
+    // Like cancel_folder() but doesn't cancel outstanding operations, allowing them to complete
+    // in the background
+    private void closed_folder() {
+        cancellable_folder = new Cancellable();
     }
     
     private void cancel_inbox(Geary.Account account) {
@@ -2120,7 +2123,7 @@ public class GearyController : Geary.BaseObject {
             return;
         
         bool inline;
-        if (!should_create_new_composer(compose_type, referred, quote, out inline))
+        if (!should_create_new_composer(compose_type, referred, quote, is_draft, out inline))
             return;
         
         ComposerWidget widget;
@@ -2139,42 +2142,57 @@ public class GearyController : Geary.BaseObject {
             }
             
             widget = new ComposerWidget(current_account, compose_type, full, quote, is_draft);
+            if (is_draft) {
+                yield widget.restore_draft_state_async(current_account);
+                main_window.conversation_viewer.blacklist_by_id(referred.id);
+            }
         }
         widget.show_all();
         
         // We want to keep track of the open composer windows, so we can allow the user to cancel
         // an exit without losing their data.
         composer_widgets.add(widget);
-        debug(@"Creating composer of type $compose_type; $(composer_widgets.size) composers total");
+        debug(@"Creating composer of type $(widget.compose_type); $(composer_widgets.size) composers total");
         widget.destroy.connect(on_composer_widget_destroy);
         
         if (inline) {
-            new ComposerEmbed(widget, main_window.conversation_viewer, referred);
+            if (widget.state == ComposerWidget.ComposerState.PANED)
+                main_window.conversation_viewer.set_paned_composer(widget);
+            else
+                new ComposerEmbed(widget, main_window.conversation_viewer, referred); // is_draft
         } else {
-            widget.state = ComposerWidget.ComposerState.DETACHED;
             new ComposerWindow(widget);
+            widget.state = ComposerWidget.ComposerState.DETACHED;
         }
     }
     
     private bool should_create_new_composer(ComposerWidget.ComposeType? compose_type,
-        Geary.Email? referred, string? quote, out bool inline) {
+        Geary.Email? referred, string? quote, bool is_draft, out bool inline) {
         inline = true;
         
         // In we're replying, see whether we already have a reply for that message.
         if (compose_type != null && compose_type != ComposerWidget.ComposeType.NEW_MESSAGE) {
             foreach (ComposerWidget cw in composer_widgets) {
                 if (cw.state != ComposerWidget.ComposerState.DETACHED &&
-                    referred != null && referred.id.equal_to(cw.referred_id)) {
+                    ((referred != null && cw.referred_ids.contains(referred.id)) ||
+                     quote != null)) {
                     cw.change_compose_type(compose_type, referred, quote);
                     return false;
                 }
             }
+            inline = !any_inline_composers();
             return true;
         }
         
         // If there are no inline composers, go ahead!
         if (!any_inline_composers())
             return true;
+        
+        // If we're resuming a draft with open composers, open in a new window.
+        if (is_draft) {
+            inline = false;
+            return true;
+        }
         
         // If we're creating a new message, and there's already a new message open, focus on
         // it if it hasn't been modified; otherwise open a new composer in a new window.
@@ -2212,7 +2230,7 @@ public class GearyController : Geary.BaseObject {
     
     public bool can_switch_conversation_view() {
         bool inline;
-        return should_create_new_composer(null, null, null, out inline);
+        return should_create_new_composer(null, null, null, false, out inline);
     }
     
     public bool any_inline_composers() {

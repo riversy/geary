@@ -69,7 +69,7 @@ private void remove_address(Gee.List<Geary.RFC822.MailboxAddress> addresses,
     }
 }
 
-public string create_to_addresses_for_reply(Geary.Email email,
+public Geary.RFC822.MailboxAddresses create_to_addresses_for_reply(Geary.Email email,
     string? sender_address = null) {
     Gee.List<Geary.RFC822.MailboxAddress> new_to =
         new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
@@ -87,10 +87,10 @@ public string create_to_addresses_for_reply(Geary.Email email,
     if (!String.is_empty(sender_address))
         remove_address(new_to, sender_address);
     
-    return new_to.size > 0 ? new Geary.RFC822.MailboxAddresses(new_to).to_rfc822_string() : "";
+    return new Geary.RFC822.MailboxAddresses(new_to);
 }
 
-public string create_cc_addresses_for_reply_all(Geary.Email email,
+public Geary.RFC822.MailboxAddresses create_cc_addresses_for_reply_all(Geary.Email email,
     string? sender_address = null) {
     Gee.List<Geary.RFC822.MailboxAddress> new_cc = new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
     
@@ -108,7 +108,53 @@ public string create_cc_addresses_for_reply_all(Geary.Email email,
     if (!String.is_empty(sender_address))
         remove_address(new_cc, sender_address, true);
     
-    return new_cc.size > 0 ? new Geary.RFC822.MailboxAddresses(new_cc).to_rfc822_string() : "";
+    return new Geary.RFC822.MailboxAddresses(new_cc);
+}
+
+public Geary.RFC822.MailboxAddresses merge_addresses(Geary.RFC822.MailboxAddresses? first,
+    Geary.RFC822.MailboxAddresses? second) {
+    Gee.List<Geary.RFC822.MailboxAddress> result = new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
+    if (first != null) {
+        result.add_all(first.get_all());
+        // Add addresses from second that aren't in first.
+        if (second != null)
+            foreach (Geary.RFC822.MailboxAddress address in second)
+                if (!first.contains_normalized(address.address))
+                    result.add(address);
+    } else if (second != null) {
+        result.add_all(second.get_all());
+    }
+    
+    return new Geary.RFC822.MailboxAddresses(result);
+}
+
+public Geary.RFC822.MailboxAddresses remove_addresses(Geary.RFC822.MailboxAddresses? from_addresses,
+    Geary.RFC822.MailboxAddresses? remove_addresses) {
+    Gee.List<Geary.RFC822.MailboxAddress> result = new Gee.ArrayList<Geary.RFC822.MailboxAddress>();
+    if (from_addresses != null) {
+        result.add_all(from_addresses.get_all());
+        if (remove_addresses != null)
+            foreach (Geary.RFC822.MailboxAddress address in remove_addresses)
+                remove_address(result, address.address, true);
+    }
+    return new Geary.RFC822.MailboxAddresses(result);
+}
+
+public bool equal(Geary.RFC822.MailboxAddresses? first, Geary.RFC822.MailboxAddresses? second) {
+    bool first_empty = first == null || first.size == 0;
+    bool second_empty = second == null || second.size == 0;
+    if (first_empty && second_empty || first == second)
+        return true;
+    if (first_empty || second_empty || first.size != second.size)
+        return false;
+    
+    Gee.HashSet<string> first_addresses = new Gee.HashSet<string>();
+    Gee.HashSet<string> second_addresses = new Gee.HashSet<string>();
+    foreach (Geary.RFC822.MailboxAddress a in first)
+        first_addresses.add(a.as_key());
+    foreach (Geary.RFC822.MailboxAddress a in second)
+        second_addresses.add(a.as_key());
+    return Geary.Collection.are_sets_equal<string>(first_addresses, second_addresses);
 }
 
 public string reply_references(Geary.Email source) {
