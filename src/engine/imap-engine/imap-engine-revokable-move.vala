@@ -10,10 +10,6 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     private FolderPath original_dest;
     private Gee.Set<Imap.UID> destination_uids;
     
-    /**
-     * Supplied EmailIdentifiers *must* be loaded with UIDs of the messages on the *destination*
-     * folder.  Do *not* merely stuff in here the EmailIdentifier from the source folder.
-     */
     public RevokableMove(GenericAccount account, FolderPath original_source, FolderPath original_dest,
         Gee.Set<Imap.UID> destination_uids) {
         this.account = account;
@@ -44,7 +40,7 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     
     private async bool internal_revoke_async(Cancellable? cancellable) throws Error {
         // at this point, it's a one-shot deal: any error from here on out, or success, revoke
-        // is completed
+        // is spent
         can_revoke = false;
         
         // Use a detached Folder object, which bypasses synchronization on the destination folder
@@ -62,21 +58,8 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
                 foreach (Imap.MessageSet msg_set in msg_sets)
                     yield dest_folder.copy_email_async(msg_set, original_source, cancellable);
                 
-                // remove it from the destination in one fell swoop
+                // remove it from the original destination in one fell swoop
                 yield dest_folder.remove_email_async(msg_sets, cancellable);
-                
-                // HACK:
-                // There's not a super-reliable way to wait until the delete of the message in this
-                // folder has round-tripped; could wait for the UID to be reported deleted, but it's
-                // possible in IMAP to delete a message not present in folder and not get an error
-                // (but also not be notified of its removal), and so waiting is a bad idea.  Don't
-                // want to close the folder immediately because that leaves the local remove_marker
-                // in place and the folder is treated as "dirty", causing a full renormalize to
-                // occur when next opened, which is expensive.  So: just wait a bit and give the
-                // server a chance to report the message is gone, leaving the db in a good state.
-                // Do this *after* marking can_revoke=false so client is notified that this object
-                // is now worthless.
-                yield Scheduler.sleep_async(5);
             }
         } finally {
             // note that the Cancellable is not used

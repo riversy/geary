@@ -1881,7 +1881,7 @@ public class GearyController : Geary.BaseObject {
         Gee.List<Geary.EmailIdentifier> ids, Geary.FolderPath destination, Cancellable? cancellable) {
         try {
             save_revokable(yield source_folder.move_email_async(ids, destination, cancellable),
-                _("Undo move"));
+                _("Undo move (Ctrl+Z)"));
         } catch (Error err) {
             debug("%s: Unable to move %d emails: %s", source_folder.to_string(), ids.size,
                 err.message);
@@ -2426,7 +2426,7 @@ public class GearyController : Geary.BaseObject {
                 debug("Folder %s doesn't support archive", current_folder.to_string());
             } else {
                 save_revokable(yield supports_archive.archive_email_async(ids, cancellable),
-                    _("Undo archive"));
+                    _("Undo archive (Ctrl+Z)"));
             }
             
             return;
@@ -2441,7 +2441,7 @@ public class GearyController : Geary.BaseObject {
                 Geary.FolderSupport.Move? supports_move = current_folder as Geary.FolderSupport.Move;
                 if (supports_move != null) {
                     save_revokable(yield supports_move.move_email_async(ids, trash_path, cancellable),
-                        _("Undo trash"));
+                        _("Undo trash (Ctrl+Z)"));
                     
                     return;
                 }
@@ -2487,7 +2487,7 @@ public class GearyController : Geary.BaseObject {
         
         Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);
         undo_action.sensitive = revokable != null && revokable.can_revoke;
-        undo_action.tooltip = (revokable != null && description != null) ? description : _("Undo");
+        undo_action.tooltip = (revokable != null && description != null) ? description : _("Undo (Ctrl+Z)");
     }
     
     private void on_can_revoke_changed() {
