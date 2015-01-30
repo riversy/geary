@@ -2476,28 +2476,28 @@ public class GearyController : Geary.BaseObject {
     private void save_revokable(Geary.Revokable? new_revokable, string? description) {
         // disconnect old revokable
         if (revokable != null)
-            revokable.notify[Geary.Revokable.PROP_CAN_REVOKE].disconnect(on_can_revoke_changed);
+            revokable.notify[Geary.Revokable.PROP_VALID].disconnect(on_revokable_valid_changed);
         
         // store new revokable
         revokable = new_revokable;
         
         // connect to new revokable
         if (revokable != null)
-            revokable.notify[Geary.Revokable.PROP_CAN_REVOKE].connect(on_can_revoke_changed);
+            revokable.notify[Geary.Revokable.PROP_VALID].connect(on_revokable_valid_changed);
         
         Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);
-        undo_action.sensitive = revokable != null && revokable.can_revoke;
+        undo_action.sensitive = revokable != null && revokable.valid;
         undo_action.tooltip = (revokable != null && description != null) ? description : _("Undo (Ctrl+Z)");
     }
     
-    private void on_can_revoke_changed() {
+    private void on_revokable_valid_changed() {
         // remove revokable if it goes invalid
-        if (revokable != null && !revokable.can_revoke)
+        if (revokable != null && !revokable.valid)
             save_revokable(null, null);
     }
     
     private void on_revoke() {
-        if (revokable != null && revokable.can_revoke)
+        if (revokable != null && revokable.valid)
             revokable.revoke_async.begin(null, on_revoke_completed);
     }
     

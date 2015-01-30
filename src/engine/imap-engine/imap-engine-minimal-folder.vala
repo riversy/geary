@@ -52,6 +52,15 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
     private Nonblocking.Mutex open_mutex = new Nonblocking.Mutex();
     private Nonblocking.Mutex close_mutex = new Nonblocking.Mutex();
     
+    /**
+     * Called when the folder is closing (and not reestablishing a connection) and will be flushing
+     * the replay queue.  Subscribers may add ReplayOperations to the list, which will be enqueued
+     * before the queue is flushed.
+     *
+     * Note that this is ''not'' fired if the queue is not being flushed.
+     */
+    public signal void closing(Gee.List<ReplayOperation> final_ops);
+    
     public MinimalFolder(GenericAccount account, Imap.Account remote, ImapDB.Account local,
         ImapDB.Folder local_folder, SpecialFolderType special_folder_type) {
         _account = account;
@@ -77,6 +86,10 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         cancel_remote_open_timer();
         
         local_folder.email_complete.disconnect(on_email_complete);
+    }
+    
+    protected virtual void notify_closing(Gee.List<ReplayOperation> final_ops) {
+        closing(final_ops);
     }
     
     /*
@@ -814,6 +827,16 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         // That said, only flush, close, and destroy the ReplayQueue if fully closing and not
         // preparing for a connection reestablishment
         if (open_count <= 0) {
+            // if closing and flushing the queue, give Revokables a chance to schedule their
+            // commit operations before going down
+            if (flush_pending) {
+                Gee.List<ReplayOperation> final_ops = new Gee.ArrayList<ReplayOperation>();
+                notify_closing(final_ops);
+                
+                foreach (ReplayOperation op in final_ops)
+                    replay_queue.schedule(op);
+            }
+            
             // Close the replay queues; if a "clean" close, flush pending operations so everything
             // gets a chance to run; if forced close, drop everything outstanding
             try {
@@ -1381,16 +1404,27 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         if (destination.equal_to(path))
             return null;
         
-        MoveEmail move = new MoveEmail(this, (Gee.List<ImapDB.EmailIdentifier>) to_move, destination);
-        replay_queue.schedule(move);
+        MoveEmailPrepare prepare = new MoveEmailPrepare(this, (Gee.List<ImapDB.EmailIdentifier>) to_move,
+            cancellable);
+        replay_queue.schedule(prepare);
         
-        yield move.wait_for_ready_async(cancellable);
+        yield prepare.wait_for_ready_async(cancellable);
         
-        // If no COPYUIDs returned, can't revoke this operation
-        if (move.destination_uids.size == 0)
+        if (prepare.prepared_for_move == null || prepare.prepared_for_move.size == 0)
             return null;
         
-        return new RevokableMove(_account, path, destination, move.destination_uids);
+        return new RevokableMove(_account, this, destination, prepare.prepared_for_move);
+    }
+    
+    public void schedule_op(ReplayOperation op) throws Error {
+        check_open("schedule_op");
+        
+        replay_queue.schedule(op);
+    }
+    
+    public async void exec_op_async(ReplayOperation op, Cancellable? cancellable) throws Error {
+        schedule_op(op);
+        yield op.wait_for_ready_async(cancellable);
     }
     
     private void on_email_flags_changed(Gee.Map<Geary.EmailIdentifier, Geary.EmailFlags> changed) {

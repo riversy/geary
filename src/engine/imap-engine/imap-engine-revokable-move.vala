@@ -6,79 +6,65 @@
 
 private class Geary.ImapEngine.RevokableMove : Revokable {
     private GenericAccount account;
-    private FolderPath original_source;
-    private FolderPath original_dest;
-    private Gee.Set<Imap.UID> destination_uids;
+    private ImapEngine.MinimalFolder source;
+    private FolderPath destination;
+    private Gee.Set<ImapDB.EmailIdentifier> move_ids;
     
-    public RevokableMove(GenericAccount account, FolderPath original_source, FolderPath original_dest,
-        Gee.Set<Imap.UID> destination_uids) {
+    public RevokableMove(GenericAccount account, ImapEngine.MinimalFolder source, FolderPath destination,
+        Gee.Set<ImapDB.EmailIdentifier> move_ids) {
         this.account = account;
-        this.original_source = original_source;
-        this.original_dest = original_dest;
-        this.destination_uids = destination_uids;
+        this.source = source;
+        this.destination = destination;
+        this.move_ids = move_ids;
         
         account.folders_available_unavailable.connect(on_folders_available_unavailable);
-        account.email_removed.connect(on_folder_email_removed);
+        source.email_removed.connect(on_source_email_removed);
+        source.closing.connect(on_source_closing);
     }
     
     ~RevokableMove() {
         account.folders_available_unavailable.disconnect(on_folders_available_unavailable);
-        account.email_removed.disconnect(on_folder_email_removed);
-    }
-    
-    public override async bool revoke_async(Cancellable? cancellable) throws Error {
-        if (is_revoking)
-            throw new EngineError.ALREADY_OPEN("Already revoking operation");
+        source.email_removed.disconnect(on_source_email_removed);
+        source.closing.disconnect(on_source_closing);
         
-        is_revoking = true;
-        try {
-            return yield internal_revoke_async(cancellable);
-        } finally {
-            is_revoking = false;
-        }
-    }
-    
-    private async bool internal_revoke_async(Cancellable? cancellable) throws Error {
-        // at this point, it's a one-shot deal: any error from here on out, or success, revoke
-        // is spent
-        can_revoke = false;
-        
-        // Use a detached Folder object, which bypasses synchronization on the destination folder
-        // for "quick" operations
-        Imap.Folder dest_folder = yield account.fetch_detached_folder_async(original_dest, cancellable);
-        yield dest_folder.open_async(cancellable);
-        
-        // open, revoke, close, ensuring the close and signal disconnect are performed in all cases
-        try {
-            // watch out for messages detected as gone when folder is opened
-            if (destination_uids.size > 0) {
-                Gee.List<Imap.MessageSet> msg_sets = Imap.MessageSet.uid_sparse(destination_uids);
-                
-                // copy the moved email back to its source
-                foreach (Imap.MessageSet msg_set in msg_sets)
-                    yield dest_folder.copy_email_async(msg_set, original_source, cancellable);
-                
-                // remove it from the original destination in one fell swoop
-                yield dest_folder.remove_email_async(msg_sets, cancellable);
-            }
-        } finally {
-            // note that the Cancellable is not used
+        // if still valid, schedule operation so its executed
+        if (valid) {
+            debug("Freeing revokable, scheduling move %d emails from %s to %s", move_ids.size,
+                source.path.to_string(), destination.to_string());
+            
             try {
-                yield dest_folder.close_async(null);
+                source.schedule_op(new MoveEmailCommit(source, move_ids, destination, null));
             } catch (Error err) {
-                // ignored
+                debug("Move from %s to %s failed: %s", source.path.to_string(), destination.to_string(),
+                    err.message);
             }
         }
-        
-        return can_revoke;
+    }
+    
+    protected override async void internal_revoke_async(Cancellable? cancellable) throws Error {
+        try {
+            yield source.exec_op_async(new MoveEmailRevoke(source, move_ids, cancellable),
+                cancellable);
+        } finally {
+            valid = false;
+        }
+    }
+    
+    protected override async void internal_commit_async(Cancellable? cancellable) throws Error {
+        try {
+            yield source.exec_op_async(new MoveEmailCommit(source, move_ids, destination, cancellable),
+                cancellable);
+        } finally {
+            valid = false;
+        }
     }
     
     private void on_folders_available_unavailable(Gee.List<Folder>? available, Gee.List<Folder>? unavailable) {
-        // look for either of the original folders going away
+        // look for either of the folders going away
         if (unavailable != null) {
             foreach (Folder folder in unavailable) {
-                if (folder.path.equal_to(original_source) || folder.path.equal_to(original_dest)) {
-                    can_revoke = false;
+                if (folder.path.equal_to(source.path) || folder.path.equal_to(destination)) {
+                    valid = false;
                     
                     break;
                 }
@@ -86,21 +72,20 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
         }
     }
     
-    private void on_folder_email_removed(Folder folder, Gee.Collection<EmailIdentifier> ids) {
+    private void on_source_email_removed(Gee.Collection<EmailIdentifier> ids) {
         // one-way switch, and only interested in destination folder activity
-        if (!can_revoke || !folder.path.equal_to(original_dest))
+        if (!valid)
             return;
         
-        // convert generic identifiers to UIDs
-        Gee.HashSet<Imap.UID> removed_uids = traverse<EmailIdentifier>(ids)
-            .cast_object<ImapDB.EmailIdentifier>()
-            .filter(id => id.uid == null)
-            .map<Imap.UID>(id => id.uid)
-            .to_hash_set();
+        foreach (EmailIdentifier id in ids)
+            move_ids.remove((ImapDB.EmailIdentifier) id);
         
-        // otherwise, ability to revoke is best-effort
-        destination_uids.remove_all(removed_uids);
-        can_revoke = destination_uids.size > 0;
+        valid = move_ids.size > 0;
+    }
+    
+    private void on_source_closing(Gee.List<ReplayOperation> final_ops) {
+        if (valid)
+            final_ops.add(new MoveEmailCommit(source, move_ids, destination, null));
     }
 }
 
