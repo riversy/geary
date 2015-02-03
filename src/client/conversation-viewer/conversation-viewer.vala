@@ -4,6 +4,13 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * A WebKit view displaying all the emails in a {@link Geary.App.Conversation}.
+ *
+ * Unlike ConversationListStore (which sorts by date received), ConversationViewer sorts by the
+ * {@link Geary.Email.date} field (the Date: header), as that's the date displayed to the user.
+ */
+
 public class ConversationViewer : Gtk.Box {
     public const Geary.Email.Field REQUIRED_FIELDS =
         Geary.Email.Field.HEADER
@@ -129,7 +136,7 @@ public class ConversationViewer : Gtk.Box {
     
     // List of emails in this view.
     public Gee.TreeSet<Geary.Email> messages { get; private set; default = 
-        new Gee.TreeSet<Geary.Email>(Geary.Email.compare_date_ascending); }
+        new Gee.TreeSet<Geary.Email>(Geary.Email.compare_sent_date_ascending); }
     
     // The HTML viewer to view the emails.
     public ConversationWebView web_view { get; private set; }
@@ -231,6 +238,10 @@ public class ConversationViewer : Gtk.Box {
         Configuration config = GearyApplication.instance.config;
         config.bind(Configuration.COMPOSER_PANE_POSITION_KEY, composer_paned, "position");
         pack_start(composer_paned);
+        composer_boxes.notify["visible"].connect(() => {
+            if (!composer_boxes.visible && !message_overlay.visible)
+                message_overlay.show();
+            });
         
         conversation_find_bar = new ConversationFindBar(web_view);
         conversation_find_bar.no_show_all = true;
@@ -243,6 +254,8 @@ public class ConversationViewer : Gtk.Box {
         ComposerBox container = new ComposerBox(composer);
         composer_boxes.pack_start(container);
         composer_boxes.show();
+        if (composer.state == ComposerWidget.ComposerState.NEW)
+            message_overlay.hide();
     }
     
     public Geary.Email? get_last_message() {
@@ -493,7 +506,7 @@ public class ConversationViewer : Gtk.Box {
         // Fetch full messages.
         Gee.Collection<Geary.Email>? messages_to_add
             = yield list_full_messages_async(conversation.get_emails(
-            Geary.App.Conversation.Ordering.DATE_ASCENDING), cancellable);
+            Geary.App.Conversation.Ordering.SENT_DATE_ASCENDING), cancellable);
         
         // Add messages.
         if (messages_to_add != null) {
@@ -2436,11 +2449,6 @@ public class ConversationViewer : Gtk.Box {
     private bool in_drafts_folder() {
         return current_folder != null && current_folder.special_folder_type
             == Geary.SpecialFolderType.DRAFTS;
-    }
-    
-    // The Composer may need to adjust the mode back to conversation
-    public void show_conversation_div() {
-        set_mode(DisplayMode.CONVERSATION);
     }
 }
 
