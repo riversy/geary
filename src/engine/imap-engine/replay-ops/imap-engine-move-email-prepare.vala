@@ -4,6 +4,11 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * Stage one of a {@link RevokableMove}: collect valid {@link ImapDB.EmailIdentifiers}, mark
+ * messages as removed, and update counts.
+ */
+
 private class Geary.ImapEngine.MoveEmailPrepare : Geary.ImapEngine.SendReplayOperation {
     public Gee.Set<ImapDB.EmailIdentifier>? prepared_for_move = null;
     
@@ -59,7 +64,7 @@ private class Geary.ImapEngine.MoveEmailPrepare : Geary.ImapEngine.SendReplayOpe
     }
     
     public override string describe_state() {
-        return "%d email IDs".printf(prepared_for_move.size);
+        return "%d email IDs".printf(prepared_for_move != null ? prepared_for_move.size : 0);
     }
 }
 

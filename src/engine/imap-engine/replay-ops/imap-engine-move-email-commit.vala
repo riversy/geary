@@ -4,6 +4,10 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * Stage two of a {@link RevokableMove}: move messages from folder to destination.
+ */
+
 private class Geary.ImapEngine.MoveEmailCommit : Geary.ImapEngine.SendReplayOperation {
     private MinimalFolder engine;
     private Gee.List<ImapDB.EmailIdentifier> to_move = new Gee.ArrayList<ImapDB.EmailIdentifier>();

@@ -32,7 +32,22 @@ public abstract class Geary.Revokable : BaseObject {
      */
     public bool in_process { get; protected set; default = false; }
     
-    protected Revokable() {
+    private uint commit_timeout_id = 0;
+    
+    /**
+     * Create a {@link Revokable} with optional parameters.
+     *
+     * If commit_timeout_sec is nonzero, Revokable will automatically call {@link commit_async}
+     * after the timeout expires if it is still {@link valid}.
+     */
+    protected Revokable(int commit_timeout_sec = 0) {
+        if (commit_timeout_sec > 0)
+            commit_timeout_id = Timeout.add_seconds(commit_timeout_sec, on_commit);
+    }
+    
+    ~Revokable() {
+        if (commit_timeout_id > 0)
+            Source.remove(commit_timeout_id);
     }
     
     /**
@@ -41,11 +56,15 @@ public abstract class Geary.Revokable : BaseObject {
      * If the call throws an Error that does not necessarily mean the {@link Revokable} is
      * invalid.  Check {@link valid}.
      *
-     * @throws EngineError.ALREADY_OPEN if {@link in_process} is true.
+     * @throws EngineError.ALREADY_OPEN if {@link in_process} is true.  EngineError.ALREADY_CLOSED
+     * if {@link valid} is false.
      */
     public virtual async void revoke_async(Cancellable? cancellable = null) throws Error {
         if (in_process)
             throw new EngineError.ALREADY_OPEN("Already revoking or committing operation");
+        
+        if (!valid)
+            throw new EngineError.ALREADY_CLOSED("Revokable not valid");
         
         in_process = true;
         try {
@@ -76,12 +95,15 @@ public abstract class Geary.Revokable : BaseObject {
      * Even if the operation "actually" commits and is not delayed, calling commit_async() will
      * make this Revokable invalid.
      *
-     * @throws EngineError.ALREADY_OPEN if {@link is_revoking} or {@link is_committing} is true
-     * when called.
+     * @throws EngineError.ALREADY_OPEN if {@link in_process} is true.  EngineError.ALREADY_CLOSED
+     * if {@link valid} is false.
      */
     public virtual async void commit_async(Cancellable? cancellable = null) throws Error {
         if (in_process)
             throw new EngineError.ALREADY_OPEN("Already revoking or committing operation");
+        
+        if (!valid)
+            throw new EngineError.ALREADY_CLOSED("Revokable not valid");
         
         in_process = true;
         try {
@@ -101,5 +123,14 @@ public abstract class Geary.Revokable : BaseObject {
      * This call *must* set {@link valid} before exiting.
      */
     protected abstract async void internal_commit_async(Cancellable? cancellable) throws Error;
+    
+    private bool on_commit() {
+        commit_timeout_id = 0;
+        
+        if (valid && !in_process)
+            commit_async.begin();
+        
+        return false;
+    }
 }
 

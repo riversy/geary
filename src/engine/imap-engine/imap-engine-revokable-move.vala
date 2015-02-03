@@ -5,6 +5,8 @@
  */
 
 private class Geary.ImapEngine.RevokableMove : Revokable {
+    private const int REVOKE_TIMEOUT_SEC = 60;
+    
     private GenericAccount account;
     private ImapEngine.MinimalFolder source;
     private FolderPath destination;
@@ -12,6 +14,8 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     
     public RevokableMove(GenericAccount account, ImapEngine.MinimalFolder source, FolderPath destination,
         Gee.Set<ImapDB.EmailIdentifier> move_ids) {
+        base (REVOKE_TIMEOUT_SEC);
+        
         this.account = account;
         this.source = source;
         this.destination = destination;
@@ -73,7 +77,7 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     }
     
     private void on_source_email_removed(Gee.Collection<EmailIdentifier> ids) {
-        // one-way switch, and only interested in destination folder activity
+        // one-way switch
         if (!valid)
             return;
         
@@ -84,8 +88,11 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     }
     
     private void on_source_closing(Gee.List<ReplayOperation> final_ops) {
-        if (valid)
-            final_ops.add(new MoveEmailCommit(source, move_ids, destination, null));
+        if (!valid)
+            return;
+        
+        final_ops.add(new MoveEmailCommit(source, move_ids, destination, null));
+        valid = false;
     }
 }
 

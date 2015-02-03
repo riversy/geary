@@ -341,7 +341,8 @@ public class Geary.Imap.ClientSessionManager : BaseObject {
     
     public async void release_session_async(ClientSession session, Cancellable? cancellable)
         throws Error {
-        check_open();
+        // Don't check_open(), it's valid for this to be called when is_open is false, that happens
+        // during mop-up
         
         MailboxSpecifier? mailbox;
         ClientSession.Context context = session.get_context(out mailbox);
@@ -383,9 +384,15 @@ public class Geary.Imap.ClientSessionManager : BaseObject {
                 assert_not_reached();
         }
         
-        if (unreserve) {
+        if (!unreserve)
+            return;
+        
+        // if not open, disconnect, which will remove from the reserved pool anyway
+        if (!is_open) {
+            yield force_disconnect_async(session, true);
+        } else {
             try {
-                // don't respect Cancellable because this *must* happen; don't want this lingering 
+                // don't respect Cancellable because this *must* happen; don't want this lingering
                 // on the reserved list forever
                 int token = yield sessions_mutex.claim_async();
                 

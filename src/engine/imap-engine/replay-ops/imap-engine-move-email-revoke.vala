@@ -4,6 +4,10 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * Revoked {@link RevokableMove}: Unmark emails as removed and update counts.
+ */
+
 private class Geary.ImapEngine.MoveEmailRevoke : Geary.ImapEngine.SendReplayOperation {
     private MinimalFolder engine;
     private Gee.List<ImapDB.EmailIdentifier> to_revoke = new Gee.ArrayList<ImapDB.EmailIdentifier>();
@@ -27,12 +31,15 @@ private class Geary.ImapEngine.MoveEmailRevoke : Geary.ImapEngine.SendReplayOper
         if (to_revoke.size == 0)
             return ReplayOperation.Status.COMPLETED;
         
-        yield engine.local_folder.mark_removed_async(to_revoke, false, cancellable);
+        Gee.Set<ImapDB.EmailIdentifier>? revoked = yield engine.local_folder.mark_removed_async(
+            to_revoke, false, cancellable);
+        if (revoked == null || revoked.size == 0)
+            return ReplayOperation.Status.COMPLETED;
         
         int count = engine.get_remote_counts(null, null);
         
-        engine.replay_notify_email_inserted(to_revoke);
-        engine.replay_notify_email_count_changed(count + to_revoke.size,
+        engine.replay_notify_email_inserted(revoked);
+        engine.replay_notify_email_count_changed(count + revoked.size,
             Geary.Folder.CountChangeReason.INSERTED);
         
         return ReplayOperation.Status.COMPLETED;

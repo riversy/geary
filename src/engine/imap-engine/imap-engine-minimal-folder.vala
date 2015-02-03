@@ -45,6 +45,7 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
     private bool remote_opened = false;
     private Nonblocking.ReportingSemaphore<bool> remote_semaphore =
         new Nonblocking.ReportingSemaphore<bool>(false);
+    private Nonblocking.Semaphore closed_semaphore = new Nonblocking.Semaphore();
     private ReplayQueue replay_queue;
     private int remote_count = -1;
     private uint open_remote_timer_id = 0;
@@ -537,6 +538,9 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         // reset to force waiting in wait_for_open_async()
         remote_semaphore.reset();
         
+        // reset to force waiting in wait_for_close_async()
+        closed_semaphore.reset();
+        
         // Unless NO_DELAY is set, do NOT open the remote side here; wait for the ReplayQueue to
         // require a remote connection or wait_for_open_async() to be called ... this allows for
         // fast local-only operations to occur, local-only either because (a) the folder has all
@@ -758,6 +762,22 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
     }
     
     public override async void close_async(Cancellable? cancellable = null) throws Error {
+        // Check open_count but only decrement inside of replay queue
+        if (open_count <= 0)
+            return;
+        
+        UserClose user_close = new UserClose(this, cancellable);
+        replay_queue.schedule(user_close);
+        
+        yield user_close.wait_for_ready_async(cancellable);
+    }
+    
+    public override async void wait_for_close_async(Cancellable? cancellable = null) throws Error {
+        yield closed_semaphore.wait_async(cancellable);
+    }
+    
+    internal async void user_close_async(Cancellable? cancellable) {
+        // decrement open_count and, if zero, continue closing Folder
         if (open_count == 0 || --open_count > 0)
             return;
         
@@ -767,11 +787,9 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         // block anyone from wait_until_open_async(), as this is no longer open
         remote_semaphore.reset();
         
-        ReplayDisconnect disconnect_op = new ReplayDisconnect(this,
-            Imap.ClientSession.DisconnectReason.REMOTE_CLOSE, true, cancellable);
-        replay_queue.schedule(disconnect_op);
-        
-        yield disconnect_op.wait_for_ready_async(cancellable);
+        // don't yield here, close_internal_async() needs to be called outside of the replay queue
+        // the open_count protects against this path scheduling it more than once
+        close_internal_async.begin(CloseReason.LOCAL_CLOSE, CloseReason.REMOTE_CLOSE, true, cancellable);
     }
     
     // Close the remote connection and, if open_count is zero, the Folder itself.  A Mutex is used
@@ -901,6 +919,10 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         
         notify_closed(CloseReason.FOLDER_CLOSED);
         
+        // If not closing in the background, do it here
+        if (closing_remote_folder == null)
+            closed_semaphore.blind_notify();
+        
         debug("Folder %s closed", to_string());
     }
     
@@ -948,6 +970,10 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
         
         if (folder.open_count <= 0) {
             debug("Not reestablishing connection to %s: closed", folder.to_string());
+            
+            // need to do it here if not done in close_internal_locked_async()
+            if (remote_folder != null)
+                folder.closed_semaphore.blind_notify();
             
             return;
         }

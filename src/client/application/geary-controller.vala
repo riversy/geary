@@ -256,13 +256,55 @@ public class GearyController : Geary.BaseObject {
     }
     
     /**
-     * Stops the controller and shuts down Geary.
+     * At the moment, this is non-reversible, i.e. once closed a GearyController cannot be
+     * re-opened.
      */
-    public void close() {
+    public async void close_async() {
+        // hide window while shutting down, as this can take a few seconds under certain conditions
+        main_window.hide();
+        
+        // drop the Revokable, which will commit it if necessary
+        save_revokable(null, null);
+        
+        try {
+            if (current_conversations != null) {
+                yield current_conversations.stop_monitoring_async(null);
+                
+                // If not an Inbox, wait for it to close so all pending operations are flushed
+                if (!inboxes.values.contains(current_conversations.folder))
+                    yield current_conversations.folder.wait_for_close_async(null);
+            }
+        } catch (Error err) {
+            message("Error closing conversation at shutdown: %s", err.message);
+        } finally {
+            current_conversations = null;
+        }
+        
+        foreach (Geary.Folder inbox in inboxes.values) {
+            try {
+                // close and wait for all pending operations to be flushed
+                yield inbox.close_async(null);
+                yield inbox.wait_for_close_async(null);
+            } catch (Error err) {
+                message("Error closing Inbox %s at shutdown: %s", inbox.to_string(), err.message);
+            }
+        }
+        
+        foreach (Geary.Account account in email_stores.keys) {
+            try {
+                yield account.close_async(null);
+            } catch (Error err) {
+                message("Error closing account %s at shutdown: %s", account.to_string(), err.message);
+            }
+        }
+        
         main_window.destroy();
-        main_window = null;
-        current_account = null;
-        account_selected(null);
+        
+        try {
+            yield Geary.Engine.instance.close_async(null);
+        } catch (Error err) {
+            message("Error closing Geary Engine instance: %s", err.message);
+        }
     }
     
     private void add_accelerator(string accelerator, string action) {
@@ -1282,6 +1324,9 @@ public class GearyController : Geary.BaseObject {
         
         Cancellable? conversation_cancellable = (current_is_inbox ?
             inbox_cancellables.get(folder.account) : cancellable_folder);
+        
+        // clear Revokable, as Undo is only available while a folder is selected
+        save_revokable(null, null);
         
         // stop monitoring for conversations and close the folder
         if (current_conversations != null) {
