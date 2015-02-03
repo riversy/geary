@@ -4,8 +4,17 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * A @{link Geary.Revokable} for {@link MinimalFolder} move operations.
+ *
+ * This will delay executing the move until (a) the source Folder is closed or (b) a timeout passes.
+ * Even then, it will fire its "committed" signal with a {@link RevokableCommittedMove} to allow
+ * the user to undo the operation, albeit taking more time to connect, open the destination folder,
+ * and move the mail back.
+ */
+
 private class Geary.ImapEngine.RevokableMove : Revokable {
-    private const int REVOKE_TIMEOUT_SEC = 60;
+    private const int COMMIT_TIMEOUT_SEC = 60;
     
     private GenericAccount account;
     private ImapEngine.MinimalFolder source;
@@ -14,7 +23,7 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     
     public RevokableMove(GenericAccount account, ImapEngine.MinimalFolder source, FolderPath destination,
         Gee.Set<ImapDB.EmailIdentifier> move_ids) {
-        base (REVOKE_TIMEOUT_SEC);
+        base (COMMIT_TIMEOUT_SEC);
         
         this.account = account;
         this.source = source;
@@ -49,6 +58,9 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
         try {
             yield source.exec_op_async(new MoveEmailRevoke(source, move_ids, cancellable),
                 cancellable);
+            
+            // valid must still be true before firing
+            notify_revoked();
         } finally {
             valid = false;
         }
@@ -56,8 +68,11 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
     
     protected override async void internal_commit_async(Cancellable? cancellable) throws Error {
         try {
-            yield source.exec_op_async(new MoveEmailCommit(source, move_ids, destination, cancellable),
-                cancellable);
+            MoveEmailCommit op = new MoveEmailCommit(source, move_ids, destination, cancellable);
+            yield source.exec_op_async(op, cancellable);
+            
+            // valid must still be true before firing
+            notify_committed(new RevokableCommittedMove(account, source.path, destination, op.destination_uids));
         } finally {
             valid = false;
         }

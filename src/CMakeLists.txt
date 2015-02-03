@@ -193,6 +193,7 @@ engine/imap-engine/imap-engine-minimal-folder.vala
 engine/imap-engine/imap-engine-replay-operation.vala
 engine/imap-engine/imap-engine-replay-queue.vala
 engine/imap-engine/imap-engine-revokable-move.vala
+engine/imap-engine/imap-engine-revokable-committed-move.vala
 engine/imap-engine/imap-engine-send-replay-operation.vala
 engine/imap-engine/gmail/imap-engine-gmail-account.vala
 engine/imap-engine/gmail/imap-engine-gmail-all-mail-folder.vala

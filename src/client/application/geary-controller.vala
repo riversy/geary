@@ -2519,25 +2519,48 @@ public class GearyController : Geary.BaseObject {
     
     private void save_revokable(Geary.Revokable? new_revokable, string? description) {
         // disconnect old revokable
-        if (revokable != null)
+        if (revokable != null) {
             revokable.notify[Geary.Revokable.PROP_VALID].disconnect(on_revokable_valid_changed);
+            revokable.notify[Geary.Revokable.PROP_IN_PROCESS].disconnect(update_revokable_action);
+            revokable.committed.disconnect(on_revokable_committed);
+        }
         
         // store new revokable
         revokable = new_revokable;
         
         // connect to new revokable
-        if (revokable != null)
+        if (revokable != null) {
             revokable.notify[Geary.Revokable.PROP_VALID].connect(on_revokable_valid_changed);
+            revokable.notify[Geary.Revokable.PROP_IN_PROCESS].connect(update_revokable_action);
+            revokable.committed.connect(on_revokable_committed);
+        }
         
         Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);
-        undo_action.sensitive = revokable != null && revokable.valid;
         undo_action.tooltip = (revokable != null && description != null) ? description : _("Undo (Ctrl+Z)");
+        
+        update_revokable_action();
+    }
+    
+    private void update_revokable_action() {
+        Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);
+        undo_action.sensitive = revokable != null && revokable.valid && !revokable.in_process;
     }
     
     private void on_revokable_valid_changed() {
         // remove revokable if it goes invalid
         if (revokable != null && !revokable.valid)
             save_revokable(null, null);
+    }
+    
+    private void on_revokable_committed(Geary.Revokable? committed_revokable) {
+        if (committed_revokable == null)
+            return;
+        
+        debug("Committed Revokable issued another Revokable");
+        
+        // use existing description
+        Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);
+        save_revokable(committed_revokable, undo_action.tooltip);
     }
     
     private void on_revoke() {

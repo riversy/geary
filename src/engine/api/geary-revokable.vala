@@ -35,6 +35,22 @@ public abstract class Geary.Revokable : BaseObject {
     private uint commit_timeout_id = 0;
     
     /**
+     * Fired when the {@link Revokable} has been revoked.
+     *
+     * {@link valid} will stil be true when this is fired.
+     */
+    public signal void revoked();
+    
+    /**
+     * Fired when the {@link Revokable} has been committed.
+     *
+     * Some Revokables will offer a new Revokable to allow revoking the committed state.
+     *
+     * {@link valid} will stil be true when this is fired.
+     */
+    public signal void committed(Geary.Revokable? commit_revokable);
+    
+    /**
      * Create a {@link Revokable} with optional parameters.
      *
      * If commit_timeout_sec is nonzero, Revokable will automatically call {@link commit_async}
@@ -48,6 +64,14 @@ public abstract class Geary.Revokable : BaseObject {
     ~Revokable() {
         if (commit_timeout_id > 0)
             Source.remove(commit_timeout_id);
+    }
+    
+    protected virtual void notify_revoked() {
+        revoked();
+    }
+    
+    protected virtual void notify_committed(Geary.Revokable? commit_revokable) {
+        committed(commit_revokable);
     }
     
     /**
@@ -81,7 +105,8 @@ public abstract class Geary.Revokable : BaseObject {
      * ({@link in_process}, throwing the appropriate Error, etc.)  Child classes can override this
      * method and only worry about the revoke operation itself.
      *
-     * This call *must* set {@link valid} before exiting.
+     * This call *must* set {@link valid} before exiting.  It must also call {@link notify_revoked}
+     * if successful.
      */
     protected abstract async void internal_revoke_async(Cancellable? cancellable) throws Error;
     
@@ -120,7 +145,8 @@ public abstract class Geary.Revokable : BaseObject {
      * ({@link in_process}, throwing the appropriate Error, etc.)  Child classes can override this
      * method and only worry about the revoke operation itself.
      *
-     * This call *must* set {@link valid} before exiting.
+     * This call *must* set {@link valid} before exiting.  It must also call {@link notify_committed}
+     * if successful.
      */
     protected abstract async void internal_commit_async(Cancellable? cancellable) throws Error;
     
