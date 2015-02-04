@@ -137,10 +137,15 @@ public class Geary.Imap.ClientSessionManager : BaseObject {
         
         // TODO: This isn't the best (deterministic) way to deal with this, but it's easy and works
         // for now
+        int attempts = 0;
         while (sessions.size > 0) {
             debug("Waiting for ClientSessions to disconnect from ClientSessionManager...");
             Timeout.add(250, close_async.callback);
             yield;
+            
+            // give up after three seconds
+            if (++attempts > 12)
+                break;
         }
     }
     
