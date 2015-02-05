@@ -319,6 +319,9 @@ private abstract class Geary.ImapEngine.GenericAccount : Geary.Account {
         if (in_refresh_unseen.contains(folder))
             return true;
         
+        // add here, remove in completed callback
+        in_refresh_unseen.add(folder);
+        
         refresh_unseen_async.begin(folder, null, on_refresh_unseen_completed);
         
         refresh_unseen_timeout_ids.unset(folder.path);
@@ -334,21 +337,29 @@ private abstract class Geary.ImapEngine.GenericAccount : Geary.Account {
     }
     
     private async void refresh_unseen_async(Geary.Folder folder, Cancellable? cancellable) throws Error {
-        in_refresh_unseen.add(folder);
-        
         debug("Refreshing unseen counts for %s", folder.to_string());
         
-        bool folder_created;
-        Imap.Folder remote_folder = yield remote.fetch_folder_async(folder.path,
-            out folder_created, null, cancellable);
-        
-        if (!folder_created) {
-            int unseen_count = yield remote.fetch_unseen_count_async(folder.path, cancellable);
-            remote_folder.properties.set_status_unseen(unseen_count);
-            yield local.update_folder_status_async(remote_folder, false, cancellable);
+        try {
+            bool folder_created;
+            Imap.Folder remote_folder = yield remote.fetch_folder_async(folder.path,
+                out folder_created, null, cancellable);
+            
+            // if created, don't need to fetch count because it was fetched when it was created
+            int unseen, total;
+            if (!folder_created) {
+                yield remote.fetch_counts_async(folder.path, out unseen, out total, cancellable);
+                remote_folder.properties.set_status_unseen(unseen);
+                remote_folder.properties.set_status_message_count(total, false);
+            } else {
+                unseen = remote_folder.properties.unseen;
+                total = remote_folder.properties.email_total;
+            }
+            
+            yield local.update_folder_status_async(remote_folder, false, true, cancellable);
+        } finally {
+            // added when call scheduled (above)
+            in_refresh_unseen.remove(folder);
         }
-        
-        in_refresh_unseen.remove(folder);
     }
     
     private void reschedule_folder_refresh(bool immediate) {
@@ -707,7 +718,7 @@ private abstract class Geary.ImapEngine.GenericAccount : Geary.Account {
             // always update, openable or not; have the folder update the UID info the next time
             // it's opened
             try {
-                yield local.update_folder_status_async(remote_folder, false, cancellable);
+                yield local.update_folder_status_async(remote_folder, false, false, cancellable);
             } catch (Error update_error) {
                 debug("Unable to update local folder %s with remote properties: %s",
                     remote_folder.to_string(), update_error.message);
