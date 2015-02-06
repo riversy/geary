@@ -1,4 +1,4 @@
-/* Copyright 2011-2014 Yorba Foundation
+/* Copyright 2011-2015 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution.
@@ -455,6 +455,14 @@ public abstract class Geary.Folder : BaseObject {
      * If the Folder is already closed, the method silently returns.
      */
     public abstract async void close_async(Cancellable? cancellable = null) throws Error;
+    
+    /**
+     * Wait for the Folder to fully close.
+     *
+     * Unlike {@link wait_for_open_async}, this will ''always'' block until a {@link Folder} is
+     * closed, even if it's not open.
+     */
+    public abstract async void wait_for_close_async(Cancellable? cancellable = null) throws Error;
     
     /**
      * Find the lowest- and highest-ordered {@link EmailIdentifier}s in the

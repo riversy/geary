@@ -1,15 +1,19 @@
-/* Copyright 2011-2014 Yorba Foundation
+/* Copyright 2011-2015 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
 private abstract class Geary.ImapEngine.SendReplayOperation : Geary.ImapEngine.ReplayOperation {
-    public SendReplayOperation(string name, ReplayOperation.OnError on_remote_error = OnError.THROW) {
+    protected SendReplayOperation(string name, ReplayOperation.OnError on_remote_error = OnError.THROW) {
         base (name, ReplayOperation.Scope.LOCAL_AND_REMOTE, on_remote_error);
     }
     
-    public SendReplayOperation.only_remote(string name, ReplayOperation.OnError on_remote_error = OnError.THROW) {
+    protected SendReplayOperation.only_local(string name, ReplayOperation.OnError on_remote_error = OnError.THROW) {
+        base (name, ReplayOperation.Scope.LOCAL_ONLY, on_remote_error);
+    }
+    
+    protected SendReplayOperation.only_remote(string name, ReplayOperation.OnError on_remote_error = OnError.THROW) {
         base (name, ReplayOperation.Scope.REMOTE_ONLY, on_remote_error);
     }
     

@@ -1,4 +1,4 @@
-/* Copyright 2012-2014 Yorba Foundation
+/* Copyright 2012-2015 Yorba Foundation
  *
  * This software is licensed under the GNU Lesser General Public License
  * (version 2.1 or later).  See the COPYING file in this distribution.
@@ -20,8 +20,10 @@ public interface Geary.FolderSupport.Move : Geary.Folder {
      * way but will return success.
      *
      * The {@link Geary.Folder} must be opened prior to attempting this operation.
+     *
+     * @returns A {@link Geary.Revokable} that may be used to revoke (undo) this operation later.
      */
-    public abstract async void move_email_async(Gee.List<Geary.EmailIdentifier> to_move,
+    public abstract async Geary.Revokable? move_email_async(Gee.List<Geary.EmailIdentifier> to_move,
         Geary.FolderPath destination, Cancellable? cancellable = null) throws Error;
 }
 
