@@ -5,8 +5,12 @@
  */
 
 /**
- * A representation of an operation with the Geary Engine that make be revoked (undone) at a later
+ * A representation of an operation with the Geary Engine that may be revoked (undone) at a later
  * time.
+ *
+ * The Revokable will do everything it can to commit the operation (if necessary) when its final
+ * ref is dropped.  However, since the final ref can be dropped at an indeterminate time, it's
+ * advised that callers force the matter by scheduling it with {@link commit_async}.
  */
 
 public abstract class Geary.Revokable : BaseObject {
@@ -57,13 +61,22 @@ public abstract class Geary.Revokable : BaseObject {
      * after the timeout expires if it is still {@link valid}.
      */
     protected Revokable(int commit_timeout_sec = 0) {
-        if (commit_timeout_sec > 0)
-            commit_timeout_id = Timeout.add_seconds(commit_timeout_sec, on_commit);
+        if (commit_timeout_sec == 0)
+            return;
+        
+        // This holds a reference to the Revokable, meaning cancelling the timeout in the dtor is
+        // largely symbolic, but so be it
+        commit_timeout_id = Timeout.add_seconds(commit_timeout_sec, on_timed_commit);
+        
+        // various events that cancel the need for a timed commit; this is important to drop the
+        // ref to this object within the event loop
+        revoked.connect(cancel_timed_commit);
+        committed.connect(cancel_timed_commit);
+        notify[PROP_VALID].connect(cancel_timed_commit);
     }
     
     ~Revokable() {
-        if (commit_timeout_id > 0)
-            Source.remove(commit_timeout_id);
+        cancel_timed_commit();
     }
     
     protected virtual void notify_revoked() {
@@ -150,13 +163,21 @@ public abstract class Geary.Revokable : BaseObject {
      */
     protected abstract async void internal_commit_async(Cancellable? cancellable) throws Error;
     
-    private bool on_commit() {
+    private bool on_timed_commit() {
         commit_timeout_id = 0;
         
         if (valid && !in_process)
             commit_async.begin();
         
         return false;
+    }
+    
+    private void cancel_timed_commit() {
+        if (commit_timeout_id == 0)
+            return;
+        
+        Source.remove(commit_timeout_id);
+        commit_timeout_id = 0;
     }
 }
 

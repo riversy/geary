@@ -2518,11 +2518,13 @@ public class GearyController : Geary.BaseObject {
     }
     
     private void save_revokable(Geary.Revokable? new_revokable, string? description) {
-        // disconnect old revokable
+        // disconnect old revokable & blindly commit it
         if (revokable != null) {
             revokable.notify[Geary.Revokable.PROP_VALID].disconnect(on_revokable_valid_changed);
             revokable.notify[Geary.Revokable.PROP_IN_PROCESS].disconnect(update_revokable_action);
             revokable.committed.disconnect(on_revokable_committed);
+            
+            revokable.commit_async.begin();
         }
         
         // store new revokable
@@ -2555,8 +2557,6 @@ public class GearyController : Geary.BaseObject {
     private void on_revokable_committed(Geary.Revokable? committed_revokable) {
         if (committed_revokable == null)
             return;
-        
-        debug("Committed Revokable issued another Revokable");
         
         // use existing description
         Gtk.Action undo_action = GearyApplication.instance.get_action(ACTION_UNDO);

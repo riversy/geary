@@ -43,7 +43,7 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
         source.closing.disconnect(on_source_closing);
         
         // if still valid, schedule operation so its executed
-        if (valid) {
+        if (valid && source.get_open_state() != Folder.OpenState.CLOSED) {
             debug("Freeing revokable, scheduling move %d emails from %s to %s", move_ids.size,
                 source.path.to_string(), destination.to_string());
             
