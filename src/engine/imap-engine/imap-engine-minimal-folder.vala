@@ -62,6 +62,19 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
      */
     public signal void closing(Gee.List<ReplayOperation> final_ops);
     
+    /**
+     * Fired when an {@link EmailIdentifier} that was marked for removal is actually reported as
+     * removed (expunged) from the server.
+     *
+     * Marked messages are reported as removed when marked in the database, to make the operation
+     * appear speedy to the caller.  When the message is finally acknowledged as removed by the
+     * server, "email-removed" is not fired to avoid double-reporting.
+     *
+     * Some internal code (especially Revokables) mark messages for removal but delay the network
+     * operation.  They need to know if the message is removed by another client, however.
+     */
+    public signal void marked_email_removed(Gee.Collection<Geary.EmailIdentifier> removed);
+    
     public MinimalFolder(GenericAccount account, Imap.Account remote, ImapDB.Account local,
         ImapDB.Folder local_folder, SpecialFolderType special_folder_type) {
         _account = account;
@@ -1239,9 +1252,15 @@ private class Geary.ImapEngine.MinimalFolder : Geary.Folder, Geary.FolderSupport
                 err.message);
         }
         
-        // notify of change
-        if (!marked && owned_id != null)
-            notify_email_removed(Geary.iterate<Geary.EmailIdentifier>(owned_id).to_array_list());
+        // notify of change ... use "marked-email-removed" for marked email to allow internal code
+        // to be notified when a removed email is "really" removed
+        if (owned_id != null) {
+            Gee.List<EmailIdentifier> removed = Geary.iterate<Geary.EmailIdentifier>(owned_id).to_array_list();
+            if (!marked)
+                notify_email_removed(removed);
+            else
+                marked_email_removed(removed);
+        }
         
         if (!marked)
             notify_email_count_changed(reported_remote_count, CountChangeReason.REMOVED);

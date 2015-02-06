@@ -32,12 +32,14 @@ private class Geary.ImapEngine.RevokableMove : Revokable {
         
         account.folders_available_unavailable.connect(on_folders_available_unavailable);
         source.email_removed.connect(on_source_email_removed);
+        source.marked_email_removed.connect(on_source_email_removed);
         source.closing.connect(on_source_closing);
     }
     
     ~RevokableMove() {
         account.folders_available_unavailable.disconnect(on_folders_available_unavailable);
         source.email_removed.disconnect(on_source_email_removed);
+        source.marked_email_removed.disconnect(on_source_email_removed);
         source.closing.disconnect(on_source_closing);
         
         // if still valid, schedule operation so its executed
