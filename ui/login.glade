@@ -298,7 +298,18 @@
           </packing>
         </child>
         <child>
-          <placeholder/>
+          <object class="GtkButton" id="button: edit_alternate_email">
+            <property name="label" translatable="yes">Add_itional email addresses…</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="use_underline">True</property>
+          </object>
+          <packing>
+            <property name="left_attach">1</property>
+            <property name="top_attach">7</property>
+            <property name="width">1</property>
+            <property name="height">1</property>
+          </packing>
         </child>
         <child>
           <placeholder/>

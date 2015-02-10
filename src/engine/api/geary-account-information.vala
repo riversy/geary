@@ -60,7 +60,17 @@ public class Geary.AccountInformation : BaseObject {
     
     public string real_name { get; set; }
     public string nickname { get; set; }
+    /**
+     * The primary email address for the account.
+     *
+     * @see get_all_email_addresses
+     */
     public string email { get; set; }
+    /**
+     * A list of additional email addresses this account accepts.
+     *
+     * @see get_all_email_addresses
+     */
     public Gee.List<string>? alternate_emails { get; set; }
     public Geary.ServiceProvider service_provider { get; set; }
     public int prefetch_period_days { get; set; }
