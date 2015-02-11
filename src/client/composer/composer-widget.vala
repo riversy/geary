@@ -747,6 +747,8 @@ public class ComposerWidget : Gtk.EventBox {
     }
     
     private void on_load_finished_and_realized() {
+        // This is safe to call even when this connection hasn't been made.
+        realize.disconnect(on_load_finished_and_realized);
         WebKit.DOM.Document document = editor.get_dom_document();
         WebKit.DOM.HTMLElement? body = document.get_element_by_id(BODY_ID) as WebKit.DOM.HTMLElement;
         assert(body != null);
@@ -1110,16 +1112,17 @@ public class ComposerWidget : Gtk.EventBox {
     private void on_detach() {
         if (state == ComposerState.DETACHED)
             return;
-        Gtk.Widget? focus = container.remove_composer();
+        Gtk.Widget? focus = container.top_window.get_focus();
+        container.remove_composer();
         ComposerWindow window = new ComposerWindow(this);
-        if (focus != null) {
+        state = ComposerWidget.ComposerState.DETACHED;
+        if (focus != null && focus.parent.visible) {
             ComposerWindow focus_win = focus.get_toplevel() as ComposerWindow;
             if (focus_win != null && focus_win == window)
                 focus.grab_focus();
         } else {
             set_focus();
         }
-        state = ComposerWidget.ComposerState.DETACHED;
     }
     
     public void ensure_paned() {
