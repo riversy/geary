@@ -47,7 +47,7 @@ public class AccountDialog : Gtk.Dialog {
         remove_confirm_pane.ok.connect(on_delete_account_confirmed);
         remove_confirm_pane.cancel.connect(on_cancel_back_to_list);
         remove_fail_pane.ok.connect(on_cancel_back_to_list);
-        edit_alternate_emails_pane.cancelled.connect(on_cancel_back_to_editor);
+        edit_alternate_emails_pane.done.connect(on_done_back_to_editor);
         
         // Set default page.
         account_list_pane.present();
@@ -211,7 +211,7 @@ public class AccountDialog : Gtk.Dialog {
         account_list_pane.present();
     }
     
-    private void on_cancel_back_to_editor() {
+    private void on_done_back_to_editor() {
         add_edit_pane.present();
     }
 }

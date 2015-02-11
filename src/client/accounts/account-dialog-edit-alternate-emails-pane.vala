@@ -14,14 +14,13 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
             label = "<b>%s</b>".printf(mailbox.address);
             use_markup = true;
             ellipsize = Pango.EllipsizeMode.END;
+            xalign = 0.0f;
         }
     }
     
     public string? email { get; private set; default = null; }
     
     public bool changed { get; private set; default = false; }
-    
-    public string? selected { get; private set; default = null; }
     
     private Gtk.Label title_label;
     private Gtk.Entry email_entry;
@@ -30,12 +29,14 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
     private Gtk.ToolButton delete_button;
     private Gtk.Button cancel_button;
     private Gtk.Button save_button;
+    private ListItem? selected_item = null;
     
+    private Geary.AccountInformation? account_info = null;
     private Geary.RFC822.MailboxAddress? primary_mailbox = null;
     private Gee.HashSet<string> email_addresses = new Gee.HashSet<string>(
         Geary.String.stri_hash, Geary.String.stri_equal);
     
-    public signal void cancelled();
+    public signal void done();
     
     public AccountDialogEditAlternateEmailsPane(Gtk.Stack stack) {
         base (stack);
@@ -56,10 +57,14 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
         email_entry.bind_property("text", add_button, "sensitive", BindingFlags.SYNC_CREATE,
             transform_email_to_sensitive);
         bind_property("changed", save_button, "sensitive", BindingFlags.SYNC_CREATE);
-        bind_property("selected", delete_button, "sensitive", BindingFlags.SYNC_CREATE);
         
-        cancel_button.clicked.connect(() => { cancelled(); });
+        delete_button.sensitive = false;
+        
+        address_listbox.row_selected.connect(on_row_selected);
         add_button.clicked.connect(on_add_clicked);
+        delete_button.clicked.connect(on_delete_clicked);
+        cancel_button.clicked.connect(() => { done(); });
+        save_button.clicked.connect(on_save_clicked);
     }
     
     private bool transform_email_to_sensitive(Binding binding, Value source, ref Value target) {
@@ -69,8 +74,11 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
     }
     
     public void set_account(Geary.AccountInformation account_info) {
+        this.account_info = account_info;
+        
         email = account_info.email;
         primary_mailbox = account_info.get_primary_mailbox_address();
+        email_addresses.clear();
         changed = false;
         
         // reset/clear widgets
@@ -81,7 +89,7 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
         foreach (Gtk.Widget widget in address_listbox.get_children())
             address_listbox.remove(widget);
         
-        // Add all except for primary; this does not constitute a change per se
+        // Add all email addresses; add_email_address() silently drops the primary address
         foreach (string email_address in account_info.get_all_email_addresses())
             add_email_address(email_address, false);
     }
@@ -106,8 +114,44 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
             changed = true;
     }
     
+    private void remove_email_address(Geary.RFC822.MailboxAddress mailbox) {
+        if (!email_addresses.remove(mailbox.address))
+            return;
+        
+        foreach (Gtk.Widget widget in address_listbox.get_children()) {
+            Gtk.ListBoxRow row = (Gtk.ListBoxRow) widget;
+            ListItem item = (ListItem) row.get_child();
+            
+            if (item.mailbox.address == mailbox.address) {
+                address_listbox.remove(widget);
+                
+                changed = true;
+                
+                break;
+            }
+        }
+    }
+    
+    private void on_row_selected(Gtk.ListBoxRow? row) {
+        selected_item = (row != null) ? (ListItem) row.get_child() : null;
+        delete_button.sensitive = (selected_item != null);
+    }
+    
     private void on_add_clicked() {
         add_email_address(email_entry.text, true);
+        email_entry.text = "";
+    }
+    
+    private void on_delete_clicked() {
+        if (selected_item != null)
+            remove_email_address(selected_item.mailbox);
+    }
+    
+    private void on_save_clicked() {
+        foreach (string email_address in email_addresses)
+            account_info.add_alternate_email(email_address);
+        
+        done();
     }
 }
 

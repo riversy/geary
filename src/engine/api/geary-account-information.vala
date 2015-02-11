@@ -155,9 +155,19 @@ public class Geary.AccountInformation : BaseObject {
         } finally {
             real_name = get_string_value(key_file, GROUP, REAL_NAME_KEY);
             nickname = get_string_value(key_file, GROUP, NICKNAME_KEY);
-            alternate_emails = get_string_list_value(key_file, GROUP, ALTERNATE_EMAILS_KEY);
-            if (alternate_emails.size == 0)
+            
+            // Store alternate emails in a list of case-insensitive strings
+            Gee.List<string> alt_email_list = get_string_list_value(key_file, GROUP, ALTERNATE_EMAILS_KEY);
+            if (alt_email_list.size == 0) {
                 alternate_emails = null;
+            } else {
+                alternate_emails = new Gee.ArrayList<string>(String.stri_equal);
+                foreach (string alt_email in alt_email_list) {
+                    if (!alternate_emails.contains(alt_email))
+                        alternate_emails.add(alt_email);
+                }
+            }
+            
             imap_credentials.user = get_string_value(key_file, GROUP, IMAP_USERNAME_KEY, email);
             imap_remember_password = get_bool_value(key_file, GROUP, IMAP_REMEMBER_PASSWORD_KEY, true);
             smtp_credentials.user = get_string_value(key_file, GROUP, SMTP_USERNAME_KEY, email);
@@ -283,6 +293,19 @@ public class Geary.AccountInformation : BaseObject {
         if (alternate_emails != null)
             all.add_all(alternate_emails);
         return all;
+    }
+    
+    /**
+     * Add an alternate email address to the account.
+     *
+     * Duplicates will be ignored.
+     */
+    public void add_alternate_email(string email) {
+        if (alternate_emails == null)
+            alternate_emails = new Gee.ArrayList<string>(String.stri_equal);
+        
+        if (!alternate_emails.contains(email))
+            alternate_emails.add(email);
     }
     
     /**
