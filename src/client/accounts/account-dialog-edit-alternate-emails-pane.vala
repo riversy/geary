@@ -28,7 +28,7 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
     private Gtk.ListBox address_listbox;
     private Gtk.ToolButton delete_button;
     private Gtk.Button cancel_button;
-    private Gtk.Button save_button;
+    private Gtk.Button update_button;
     private ListItem? selected_item = null;
     
     private Geary.AccountInformation? account_info = null;
@@ -52,11 +52,11 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
         address_listbox = (Gtk.ListBox) builder.get_object("address_listbox");
         delete_button = (Gtk.ToolButton) builder.get_object("delete_button");
         cancel_button = (Gtk.Button) builder.get_object("cancel_button");
-        save_button = (Gtk.Button) builder.get_object("save_button");
+        update_button = (Gtk.Button) builder.get_object("update_button");
         
         email_entry.bind_property("text", add_button, "sensitive", BindingFlags.SYNC_CREATE,
             transform_email_to_sensitive);
-        bind_property("changed", save_button, "sensitive", BindingFlags.SYNC_CREATE);
+        bind_property("changed", update_button, "sensitive", BindingFlags.SYNC_CREATE);
         
         delete_button.sensitive = false;
         
@@ -64,7 +64,7 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
         add_button.clicked.connect(on_add_clicked);
         delete_button.clicked.connect(on_delete_clicked);
         cancel_button.clicked.connect(() => { done(); });
-        save_button.clicked.connect(on_save_clicked);
+        update_button.clicked.connect(on_update_clicked);
     }
     
     private bool transform_email_to_sensitive(Binding binding, Value source, ref Value target) {
@@ -92,6 +92,14 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
         // Add all email addresses; add_email_address() silently drops the primary address
         foreach (string email_address in account_info.get_all_email_addresses())
             add_email_address(email_address, false);
+    }
+    
+    public override void present() {
+        base.present();
+        
+        // because in a Gtk.Stack, need to do this manually after presenting
+        email_entry.grab_focus();
+        add_button.has_default = true;
     }
     
     private void add_email_address(string email_address, bool is_change) {
@@ -139,7 +147,11 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
     
     private void on_add_clicked() {
         add_email_address(email_entry.text, true);
+        
+        // reset state for next input
         email_entry.text = "";
+        email_entry.grab_focus();
+        add_button.has_default = true;
     }
     
     private void on_delete_clicked() {
@@ -147,9 +159,8 @@ public class AccountDialogEditAlternateEmailsPane : AccountDialogPane {
             remove_email_address(selected_item.mailbox);
     }
     
-    private void on_save_clicked() {
-        foreach (string email_address in email_addresses)
-            account_info.add_alternate_email(email_address);
+    private void on_update_clicked() {
+        account_info.replace_alternate_emails(email_addresses);
         
         done();
     }

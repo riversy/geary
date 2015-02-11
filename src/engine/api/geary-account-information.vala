@@ -309,6 +309,21 @@ public class Geary.AccountInformation : BaseObject {
     }
     
     /**
+     * Replaces the list of alternate email addresses with the supplied collection.
+     *
+     * Duplicates will be ignored.
+     */
+    public void replace_alternate_emails(Gee.Collection<string>? emails) {
+        alternate_emails = null;
+        
+        if (emails == null || emails.size == 0)
+            return;
+        
+        foreach (string email in emails)
+            add_alternate_email(email);
+    }
+    
+    /**
      * Return whether this account allows setting the save_sent_mail option.
      * If not, save_sent_mail will always be true and setting it will be
      * ignored.
@@ -762,6 +777,8 @@ public class Geary.AccountInformation : BaseObject {
         key_file.set_boolean(GROUP, SAVE_SENT_MAIL_KEY, save_sent_mail);
         key_file.set_boolean(GROUP, USE_EMAIL_SIGNATURE_KEY, use_email_signature);
         key_file.set_string(GROUP, EMAIL_SIGNATURE_KEY, email_signature);
+        if (alternate_emails != null && alternate_emails.size > 0)
+            key_file.set_string_list(GROUP, ALTERNATE_EMAILS_KEY, alternate_emails.to_array());
         
         if (service_provider == ServiceProvider.OTHER) {
             key_file.set_value(GROUP, IMAP_HOST, default_imap_server_host);
