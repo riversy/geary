@@ -2270,7 +2270,7 @@ public class ComposerWidget : Gtk.EventBox {
             account.information.get_primary_mailbox_address());
         from_multiple.append_text(primary_address.to_rfc822_string());
         from_list.add(new FromAddressMap(account, primary_address));
-        if (!set_active && Geary.RFC822.Utils.equal(from,primary_address)) {
+        if (!set_active && Geary.RFC822.Utils.equal(from, primary_address)) {
             from_multiple.set_active(from_list.size - 1);
             set_active = true;
         }
@@ -2294,7 +2294,7 @@ public class ComposerWidget : Gtk.EventBox {
                 from_multiple.append_text(display);
                 from_list.add(new FromAddressMap(account, addresses));
                 
-                if (!set_active && Geary.RFC822.Utils.equal(from,addresses)) {
+                if (!set_active && Geary.RFC822.Utils.equal(from, addresses)) {
                     from_multiple.set_active(from_list.size - 1);
                     set_active = true;
                 }

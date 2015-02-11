@@ -253,7 +253,7 @@ public class Geary.AccountInformation : BaseObject {
         email = from.email;
         alternate_emails = null;
         if (from.alternate_emails != null) {
-            alternate_emails = new Gee.ArrayList<string>();
+            alternate_emails = new Gee.ArrayList<string>(String.stri_equal);
             foreach (string alternate_email in from.alternate_emails)
                 alternate_emails.add(alternate_email);
         }

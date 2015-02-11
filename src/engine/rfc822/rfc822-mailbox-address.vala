@@ -4,13 +4,46 @@
  * (version 2.1 or later).  See the COPYING file in this distribution.
  */
 
+/**
+ * An immutable object containing a representation of an Internet email address.
+ *
+ * See [[https://tools.ietf.org/html/rfc2822#section-3.4]]
+ */
+
 public class Geary.RFC822.MailboxAddress : Geary.MessageData.SearchableMessageData, BaseObject {
     internal delegate string ListToStringDelegate(MailboxAddress address);
     
+    /**
+     * The optional user-friendly name associated with the {@link MailboxAddress}.
+     *
+     * For "Dirk Gently <dirk@example.com>", this would be "Dirk Gently".
+     */
     public string? name { get; private set; }
+    
+    /**
+     * The routing of the message (optional, obsolete).
+     */
     public string? source_route { get; private set; }
+    
+    /**
+     * The mailbox (local-part) portion of the {@link MailboxAddress}.
+     *
+     * For "Dirk Gently <dirk@example.com>", this would be "dirk".
+     */
     public string mailbox { get; private set; }
+    
+    /**
+     * The domain portion of the {@link MailboxAddress}.
+     *
+     * For "Dirk Gently <dirk@example.com>", this would be "example.com".
+     */
     public string domain { get; private set; }
+    
+    /**
+     * The address specification of the {@link MailboxAddress}.
+     *
+     * For "Dirk Gently <dirk@example.com>", this would be "dirk@example.com".
+     */
     public string address { get; private set; }
     
     public MailboxAddress(string? name, string address) {
@@ -23,6 +56,9 @@ public class Geary.RFC822.MailboxAddress : Geary.MessageData.SearchableMessageDa
         if (atsign > 0) {
             mailbox = address.slice(0, atsign);
             domain = address.slice(atsign + 1, address.length);
+        } else {
+            mailbox = "";
+            domain = "";
         }
     }
     
