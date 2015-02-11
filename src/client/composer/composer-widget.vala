@@ -2277,9 +2277,16 @@ public class ComposerWidget : Gtk.EventBox {
         
         if (account.information.alternate_emails != null) {
             foreach (string alternate_email in account.information.alternate_emails) {
-                // TODO: Allow using other real name (not only mail address)
-                Geary.RFC822.MailboxAddresses addresses = new Geary.RFC822.MailboxAddresses.single(
-                    new Geary.RFC822.MailboxAddress(account.information.real_name, alternate_email));
+                Geary.RFC822.MailboxAddresses addresses =
+                    new Geary.RFC822.MailboxAddresses.from_rfc822_string(alternate_email);
+                if (addresses.size == 0)
+                    continue;
+                
+                if (addresses.size == 1 && Geary.String.is_empty(addresses[0].name)) {
+                    addresses = new Geary.RFC822.MailboxAddresses.single(
+                        new Geary.RFC822.MailboxAddress(account.information.real_name, addresses[0].address));
+                }
+                
                 // Displayed in the From dropdown to indicate an "alternate email address"
                 // for an account.  The first printf argument will be the alternate email
                 // address, and the second will be the account's primary email address.
